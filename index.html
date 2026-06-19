@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Resumidor Jurídico Asistido — Claude &amp; ChatGPT</title>
+<meta name="description" content="Orquestador documental local para resumir documentos jurídicos extensos con Claude o ChatGPT, sin APIs ni nube." />
+<!--
+  Resumidor Jurídico Asistido (RJA)
+  =================================
+  Aplicación 100% local (HTML + JS vanilla). No realiza llamadas a APIs de
+  procesamiento ni envía documentos a la nube. El usuario es quien copia los
+  prompts hacia Claude/ChatGPT (interfaz web) y pega de vuelta las respuestas.
+
+  Persistencia: IndexedDB (en el navegador del usuario). Nada sale del equipo.
+
+  Bibliotecas opcionales (mejoran extracción, NO son obligatorias):
+    - pdf.js      -> texto de PDF
+    - tesseract.js-> OCR de PDF imagen
+    - mammoth.js  -> texto de DOCX
+  Se cargan bajo demanda desde CDN. TXT y Markdown funcionan sin dependencias.
+  La exportación a Markdown y DOCX se genera con código propio (sin librerías).
+  Para uso totalmente sin red, ver README.md (vendorizado de librerías).
+-->
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c23; --panel2:#1e242d; --line:#2a323d;
+    --txt:#e7edf3; --muted:#9aa7b4; --accent:#4f8cff; --accent2:#6ee7b7;
+    --warn:#f6c177; --bad:#ff6b6b; --good:#56d364; --chip:#243041;
+    --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);line-height:1.5;font-size:15px}
+  header.app{padding:18px 22px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--panel)}
+  header.app h1{font-size:18px;margin:0}
+  header.app .sub{color:var(--muted);font-size:13px}
+  header.app .spacer{flex:1}
+  .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--chip);
+    color:var(--muted);border:1px solid var(--line)}
+  .badge.ok{color:var(--good);border-color:#2a4} .badge.off{color:var(--muted)}
+  main{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 61px)}
+  nav.steps{border-right:1px solid var(--line);background:var(--panel);padding:14px 10px}
+  nav.steps ol{list-style:none;margin:0;padding:0}
+  nav.steps li{padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--muted);
+    font-size:13px;display:flex;gap:9px;align-items:center;margin-bottom:2px}
+  nav.steps li:hover{background:var(--panel2)}
+  nav.steps li.active{background:var(--panel2);color:var(--txt)}
+  nav.steps li.done .num{background:var(--good);color:#06210f;border-color:var(--good)}
+  nav.steps .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;border:1px solid var(--line);flex:none}
+  nav.steps li.active .num{border-color:var(--accent);color:var(--accent)}
+  section.content{padding:22px 26px;overflow:auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;margin-bottom:18px}
+  .panel h2{margin:0 0 4px;font-size:16px}
+  .panel p.help{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .hidden{display:none !important}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt);padding:8px 14px;border-radius:8px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#06122e;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .drop{border:2px dashed var(--line);border-radius:var(--radius);padding:34px;text-align:center;
+    color:var(--muted);transition:.15s;background:var(--panel2)}
+  .drop.hover{border-color:var(--accent);color:var(--txt)}
+  input[type=text],input[type=number],textarea,select{background:#0d1117;color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%}
+  textarea{resize:vertical;min-height:90px;font-family:var(--mono);font-size:12.5px}
+  label.fld{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+  .progress{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .progress>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0}
+  table.blocks{width:100%;border-collapse:collapse;font-size:13px}
+  table.blocks th,table.blocks td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.blocks th{color:var(--muted);font-weight:600;font-size:12px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.done{color:var(--good);border-color:#2a4;background:#10241a}
+  .pill.pend{color:var(--warn);border-color:#5a4a2a;background:#241f12}
+  .stat{display:inline-flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 14px;min-width:96px}
+  .stat b{font-size:20px} .stat span{color:var(--muted);font-size:11px}
+  .toast{position:fixed;bottom:18px;right:18px;background:var(--panel2);border:1px solid var(--accent);
+    padding:12px 16px;border-radius:8px;max-width:340px;font-size:13px;box-shadow:0 8px 30px #0008;z-index:50}
+  .check{font-size:12px;display:inline-flex;gap:6px;align-items:center}
+  .check.ok{color:var(--good)} .check.bad{color:var(--bad)} .check.warn{color:var(--warn)}
+  code,pre{font-family:var(--mono)}
+  pre.out{background:#0d1117;border:1px solid var(--line);border-radius:8px;padding:14px;
+    overflow:auto;font-size:12.5px;max-height:420px}
+  details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--panel2)}
+  details summary{cursor:pointer;font-size:13px}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:6px;
+    padding:2px 8px;margin:2px;font-size:12px}
+  .productbox{margin-bottom:14px}
+  .productbox h3{font-size:14px;margin:0 0 6px;display:flex;gap:8px;align-items:center}
+  hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+  a{color:var(--accent)}
+  .copybtn{font-size:12px;padding:5px 10px}
+  select{width:auto}
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>⚖️ Resumidor Jurídico Asistido</h1>
+  <span class="sub">Claude &amp; ChatGPT · 100% local · sin APIs</span>
+  <span class="spacer"></span>
+  <span id="projName" class="badge">Sin proyecto</span>
+  <span id="capPdf" class="badge off" title="Extracción de PDF">PDF</span>
+  <span id="capOcr" class="badge off" title="OCR de imagen">OCR</span>
+  <span id="capDocx" class="badge off" title="Lectura de DOCX">DOCX</span>
+  <button id="btnNew" class="ghost">Nuevo</button>
+  <button id="btnOpen" class="ghost">Proyectos</button>
+</header>
+
+<main>
+  <nav class="steps">
+    <ol id="stepNav">
+      <li data-step="0"><span class="num">1</span> Cargar archivo</li>
+      <li data-step="1"><span class="num">2</span> Extraer y limpiar</li>
+      <li data-step="2"><span class="num">3</span> Estructura y bloques</li>
+      <li data-step="3"><span class="num">4</span> Prompts por bloque</li>
+      <li data-step="4"><span class="num">5</span> Pegar respuestas</li>
+      <li data-step="5"><span class="num">6</span> Consolidación</li>
+      <li data-step="6"><span class="num">7</span> Productos finales</li>
+      <li data-step="7"><span class="num">8</span> Exportar</li>
+    </ol>
+    <hr>
+    <div class="small muted" style="padding:0 12px">
+      Persistencia automática en este navegador (IndexedDB). Puede cerrar y
+      continuar después.
+    </div>
+  </nav>
+
+  <section class="content">
+
+    <!-- STEP 0: LOAD -->
+    <div class="step" data-step="0">
+      <div class="panel">
+        <h2>1 · Seleccionar archivo jurídico</h2>
+        <p class="help">Formatos: PDF (texto o imagen), DOCX, TXT, Markdown. Pensado para libros de 70 a 500 páginas. El archivo nunca sale de su equipo.</p>
+        <div id="drop" class="drop">
+          <p><b>Arrastre el documento aquí</b> o haga clic para elegir</p>
+          <p class="small muted">PDF · DOCX · TXT · MD</p>
+          <input id="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.markdown" class="hidden" />
+        </div>
+        <div id="loadInfo" class="row hidden" style="margin-top:14px"></div>
+      </div>
+      <div class="panel">
+        <h2>Metadatos del documento</h2>
+        <p class="help">Opcionales aquí; podrá completarlos/corregirlos en la ficha bibliográfica. Ayudan a generar mejores prompts.</p>
+        <div class="grid2">
+          <div><label class="fld">Título</label><input id="metaTitle" type="text" /></div>
+          <div><label class="fld">Autor</label><input id="metaAuthor" type="text" /></div>
+          <div><label class="fld">Año</label><input id="metaYear" type="text" /></div>
+          <div><label class="fld">Editorial</label><input id="metaPublisher" type="text" /></div>
+          <div><label class="fld">Materia principal</label><input id="metaSubject" type="text" placeholder="p. ej. Derecho Procesal Civil" /></div>
+          <div><label class="fld">Jurisdicción / país</label><input id="metaJuris" type="text" placeholder="p. ej. Chile" /></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1: EXTRACT -->
+    <div class="step hidden" data-step="1">
+      <div class="panel">
+        <h2>2 · Extracción, OCR y limpieza</h2>
+        <p class="help">El sistema extrae el texto automáticamente. Si el PDF es imagen (sin capa de texto) se aplica OCR local. Luego limpia encabezados/pies repetidos y normaliza el texto.</p>
+        <div class="row">
+          <button id="btnExtract" class="primary">Extraer texto</button>
+          <label class="check"><input type="checkbox" id="optOcr"> Forzar OCR (PDF imagen)</label>
+          <span id="extractMode" class="muted small"></span>
+        </div>
+        <div style="margin-top:14px" class="progress"><i id="extractBar"></i></div>
+        <div id="extractStatus" class="small muted" style="margin-top:6px"></div>
+      </div>
+      <div class="panel hidden" id="extractResult">
+        <h2>Texto extraído</h2>
+        <div class="row" style="margin-bottom:10px">
+          <span class="stat"><b id="stChars">0</b><span>caracteres</span></span>
+          <span class="stat"><b id="stWords">0</b><span>palabras</span></span>
+          <span class="stat"><b id="stPages">0</b><span>páginas (aprox.)</span></span>
+        </div>
+        <details><summary>Ver/editar texto extraído</summary>
+          <textarea id="extractedText" style="min-height:340px;margin-top:8px"></textarea>
+          <div class="row" style="margin-top:8px"><button id="btnSaveText" class="ghost">Guardar cambios de texto</button></div>
+        </details>
+      </div>
+    </div>
+
+    <!-- STEP 2: STRUCTURE / BLOCKS -->
+    <div class="step hidden" data-step="2">
+      <div class="panel">
+        <h2>3 · Detección de estructura y segmentación</h2>
+        <p class="help">Se detectan capítulos/títulos y se generan bloques. Los capítulos muy extensos se dividen automáticamente para que cada bloque entre cómodamente en una conversación de Claude/ChatGPT.</p>
+        <div class="row">
+          <label class="fld" style="margin:0">Tamaño máx. por bloque (caracteres)</label>
+          <input id="blockSize" type="number" value="14000" style="width:120px" />
+          <button id="btnSegment" class="primary">Detectar y segmentar</button>
+        </div>
+        <div id="structInfo" class="small muted" style="margin-top:10px"></div>
+      </div>
+      <div class="panel hidden" id="blocksPanel">
+        <h2>Bloques generados</h2>
+        <table class="blocks"><thead><tr><th>#</th><th>Capítulo / sección</th><th>Caracteres</th><th>Estado</th></tr></thead>
+          <tbody id="blocksTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- STEP 3: PROMPTS -->
+    <div class="step hidden" data-step="3">
+      <div class="panel">
+        <h2>4 · Prompts por bloque</h2>
+        <p class="help">Para cada bloque el sistema genera un prompt optimizado. Cópielo, péguelo en Claude o ChatGPT (interfaz web), y la respuesta la registrará en el paso 5.</p>
+        <div class="row">
+          <label class="fld" style="margin:0">Bloque</label>
+          <select id="promptBlockSel"></select>
+          <button id="btnCopyPrompt" class="primary copybtn">Copiar prompt</button>
+          <span id="promptCopied" class="check ok hidden">✓ copiado</span>
+        </div>
+        <pre class="out" id="promptOut" style="margin-top:12px"></pre>
+      </div>
+    </div>
+
+    <!-- STEP 4: PASTE RESPONSES -->
+    <div class="step hidden" data-step="4">
+      <div class="panel">
+        <h2>5 · Registrar respuestas parciales</h2>
+        <p class="help">Pegue la respuesta de Claude/ChatGPT para cada bloque. Se guarda automáticamente; podrá reanudar sin reprocesar lo ya completado.</p>
+        <div class="row"><span class="stat"><b id="stDone">0</b><span>respuestas</span></span><span class="stat"><b id="stTotal">0</b><span>bloques</span></span>
+          <div style="flex:1;min-width:200px"><div class="progress"><i id="respBar"></i></div></div></div>
+      </div>
+      <div id="respList"></div>
+    </div>
+
+    <!-- STEP 5: CONSOLIDATION -->
+    <div class="step hidden" data-step="5">
+      <div class="panel">
+        <h2>6 · Consolidación</h2>
+        <p class="help">Con las respuestas parciales el sistema arma un <b>prompt de consolidación</b> que pide a Claude/ChatGPT generar todos los productos en un formato estructurado. Copie el prompt, ejecútelo, y pegue la respuesta consolidada.</p>
+        <div class="row">
+          <button id="btnCopyConsol" class="primary copybtn">Copiar prompt de consolidación</button>
+          <span id="consolCopied" class="check ok hidden">✓ copiado</span>
+        </div>
+        <details style="margin-top:10px"><summary>Ver prompt de consolidación</summary>
+          <pre class="out" id="consolOut"></pre></details>
+        <label class="fld">Pegue aquí la respuesta consolidada de Claude/ChatGPT</label>
+        <textarea id="consolResponse" style="min-height:220px"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="btnParseConsol" class="primary">Procesar consolidación →</button>
+          <span class="muted small">Se separan automáticamente los productos.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 6: PRODUCTS -->
+    <div class="step hidden" data-step="6">
+      <div class="panel">
+        <h2>7 · Productos finales</h2>
+        <p class="help">Productos derivados del documento. Las validaciones verifican los requisitos de la especificación.</p>
+        <div id="validation" class="row" style="margin-bottom:14px"></div>
+        <div id="productsView"></div>
+      </div>
+    </div>
+
+    <!-- STEP 7: EXPORT -->
+    <div class="step hidden" data-step="7">
+      <div class="panel">
+        <h2>8 · Exportar</h2>
+        <p class="help">Exporte el dossier completo. Todo se genera localmente sin librerías externas.</p>
+        <div class="row">
+          <button id="btnExportMd" class="primary">⬇ Markdown (.md)</button>
+          <button id="btnExportDocx" class="primary">⬇ Word (.docx)</button>
+          <button id="btnExportObsidian" class="ghost">⬇ Nota Obsidian (.md)</button>
+          <button id="btnExportJson" class="ghost">⬇ Proyecto (.json)</button>
+        </div>
+        <p class="small muted" style="margin-top:12px">El .json permite respaldar/transferir el proyecto a otro equipo (Nuevo → Importar).</p>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- ============================ APP LOGIC ============================ -->
+<script>
+"use strict";
+/* ------------------------------------------------------------------ *
+ *  RJA — Resumidor Jurídico Asistido
+ *  Todo el procesamiento ocurre en el navegador. Sin APIs, sin nube.
+ * ------------------------------------------------------------------ */
+
+/* ---------- pequeñas utilidades ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const el = (t,a={},...kids)=>{const e=document.createElement(t);
+  for(const[k,v]of Object.entries(a)){if(k==='class')e.className=v;else if(k==='html')e.innerHTML=v;
+  else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v);}
+  for(const k of kids)e.append(k?.nodeType?k:document.createTextNode(k));return e;};
+function toast(msg,ms=2600){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');
+  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),ms);}
+function uid(){return 'p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function wc(s){return (s.trim().match(/\S+/g)||[]).length;}
+async function copy(text){try{await navigator.clipboard.writeText(text);return true;}
+  catch(e){const ta=el('textarea');ta.value=text;document.body.append(ta);ta.select();
+  try{document.execCommand('copy');}catch(_){}ta.remove();return true;}}
+
+/* ================================================================== *
+ *  STORAGE — IndexedDB. Guarda proyectos completos (resumible).
+ * ================================================================== */
+const DB = (()=>{
+  let dbp;
+  function open(){
+    if(dbp)return dbp;
+    dbp=new Promise((res,rej)=>{
+      const r=indexedDB.open('rja_db',1);
+      r.onupgradeneeded=()=>{const db=r.result;
+        if(!db.objectStoreNames.contains('projects'))db.createObjectStore('projects',{keyPath:'id'});};
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(mode,fn){const db=await open();return new Promise((res,rej)=>{
+    const t=db.transaction('projects',mode);const st=t.objectStore('projects');
+    const out=fn(st);t.oncomplete=()=>res(out?.result??out);t.onerror=()=>rej(t.error);});}
+  return {
+    put:(p)=>tx('readwrite',st=>st.put(p)),
+    get:(id)=>tx('readonly',st=>st.get(id)),
+    del:(id)=>tx('readwrite',st=>st.delete(id)),
+    all:()=>tx('readonly',st=>st.getAll()),
+  };
+})();
+
+/* ================================================================== *
+ *  STATE — proyecto en memoria + autosave con debounce.
+ * ================================================================== */
+function blankProject(){
+  return {
+    id:uid(), createdAt:Date.now(), updatedAt:Date.now(),
+    fileName:'', fileType:'', step:0,
+    meta:{title:'',author:'',year:'',publisher:'',edition:'',pages:'',subject:'',subsubjects:'',juris:''},
+    rawText:'', cleanText:'',
+    blocks:[],          // {id,index,chapter,text,response}
+    consolResponse:'',
+    products:null,      // parsed products object
+  };
+}
+let P = blankProject();
+let saveTimer=null;
+function touch(){P.updatedAt=Date.now();clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>DB.put(structuredCloneSafe(P)),400);}
+function structuredCloneSafe(o){return JSON.parse(JSON.stringify(o));}
+function setProjName(){$('#projName').textContent=P.meta.title||P.fileName||'Proyecto sin título';}
+
+/* ================================================================== *
+ *  WIZARD / NAV
+ * ================================================================== */
+let current=0;
+function gotoStep(n){
+  current=n; P.step=Math.max(P.step,n); touch();
+  $$('.step').forEach(s=>s.classList.toggle('hidden',+s.dataset.step!==n));
+  $$('#stepNav li').forEach(li=>{
+    const i=+li.dataset.step;
+    li.classList.toggle('active',i===n);
+    li.classList.toggle('done',i<P.step && i!==n || (i<n));
+  });
+  if(n===3)renderPrompts();
+  if(n===4)renderResponses();
+  if(n===5)renderConsolidation();
+  if(n===6)renderProducts();
+}
+$$('#stepNav li').forEach(li=>li.addEventListener('click',()=>gotoStep(+li.dataset.step)));
+
+/* ================================================================== *
+ *  STEP 0 — carga de archivo
+ * ================================================================== */
+const drop=$('#drop'), fileInput=$('#fileInput');
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hover');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('hover');
+  if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+let fileBuffer=null; // ArrayBuffer del archivo actual (para extracción)
+async function loadFile(file){
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['pdf','docx','txt','md','markdown'].includes(ext)){toast('Formato no soportado');return;}
+  fileBuffer=await file.arrayBuffer();
+  P.fileName=file.name; P.fileType=ext; P.rawText=''; P.cleanText=''; P.blocks=[];
+  if(!P.meta.title)P.meta.title=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');
+  $('#metaTitle').value=P.meta.title;
+  $('#loadInfo').classList.remove('hidden');
+  $('#loadInfo').innerHTML=`<span class="pill done">✓ ${file.name}</span>
+     <span class="muted small">${(file.size/1024).toFixed(0)} KB · ${ext.toUpperCase()}</span>
+     <button class="primary" id="goExtract">Continuar a extracción →</button>`;
+  $('#goExtract').onclick=()=>gotoStep(1);
+  setProjName(); touch();
+  toast('Archivo cargado');
+}
+// meta inputs
+const metaMap={metaTitle:'title',metaAuthor:'author',metaYear:'year',metaPublisher:'publisher',metaSubject:'subject',metaJuris:'juris'};
+for(const[id,key]of Object.entries(metaMap)){
+  const e=$('#'+id); if(!e)continue;
+  e.addEventListener('input',()=>{P.meta[key]=e.value;setProjName();touch();});
+}
+
+/* ================================================================== *
+ *  STEP 1 — extracción (PDF/DOCX/TXT/MD) + OCR + limpieza
+ * ================================================================== */
+const CDN={
+  pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  pdfWorker:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+  mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+};
+function loadScript(src){return new Promise((res,rej)=>{
+  if([...document.scripts].some(s=>s.src===src))return res();
+  const s=el('script',{src});s.onload=res;s.onerror=()=>rej(new Error('No se pudo cargar '+src));
+  document.head.append(s);});}
+async function ensurePdf(){await loadScript(CDN.pdf);
+  if(window.pdfjsLib)window.pdfjsLib.GlobalWorkerOptions.workerSrc=CDN.pdfWorker;return window.pdfjsLib;}
+async function ensureMammoth(){await loadScript(CDN.mammoth);return window.mammoth;}
+async function ensureTesseract(){await loadScript(CDN.tesseract);return window.Tesseract;}
+
+// capability probe (best effort)
+(async()=>{
+  try{await ensurePdf();$('#capPdf').classList.replace('off','ok');}catch(e){}
+  try{await ensureMammoth();$('#capDocx').classList.replace('off','ok');}catch(e){}
+  // tesseract is heavy; probe lazily only marking available script reachability
+  try{await ensureTesseract();$('#capOcr').classList.replace('off','ok');}catch(e){}
+})();
+
+function setBar(id,pct){$(id).style.width=Math.max(0,Math.min(100,pct))+'%';}
+function setExtractStatus(t){$('#extractStatus').textContent=t;}
+
+$('#btnExtract').addEventListener('click',extract);
+async function extract(){
+  const forceOcr=$('#optOcr').checked;
+  setBar('#extractBar',2); setExtractStatus('Iniciando…');
+  let text='';
+  try{
+    if(P.fileType==='txt'||P.fileType==='md'||P.fileType==='markdown'){
+      text=new TextDecoder('utf-8').decode(fileBuffer); $('#extractMode').textContent='Texto plano';
+      setBar('#extractBar',80);
+    }else if(P.fileType==='docx'){
+      $('#extractMode').textContent='DOCX (mammoth)';
+      const m=await ensureMammoth();
+      const r=await m.extractRawText({arrayBuffer:fileBuffer});
+      text=r.value; setBar('#extractBar',80);
+    }else if(P.fileType==='pdf'){
+      text=await extractPdf(forceOcr);
+    }
+  }catch(err){
+    console.error(err);
+    setExtractStatus('Error de extracción: '+err.message+'. Si está sin conexión, vea README (vendorizado) o pegue el texto manualmente abajo.');
+    $('#extractResult').classList.remove('hidden');
+    return;
+  }
+  P.rawText=text;
+  P.cleanText=cleanText(text);
+  setBar('#extractBar',100); setExtractStatus('Listo. Texto extraído y limpiado.');
+  showExtractResult();
+  touch();
+}
+
+async function extractPdf(forceOcr){
+  const pdfjs=await ensurePdf();
+  const pdf=await pdfjs.getDocument({data:fileBuffer.slice(0)}).promise;
+  const n=pdf.numPages; let out=[]; let textChars=0;
+  for(let i=1;i<=n;i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    const pageText=tc.items.map(it=>it.str).join(' ');
+    textChars+=pageText.length;
+    out.push(pageText);
+    setBar('#extractBar',(i/n)*70);
+    setExtractStatus(`Extrayendo texto… página ${i}/${n}`);
+  }
+  let joined=out.join('\n\n');
+  const avgPerPage=textChars/n;
+  const needsOcr=forceOcr || avgPerPage<40; // PDF imagen
+  if(needsOcr){
+    $('#extractMode').textContent='PDF imagen → OCR local (tesseract)';
+    setExtractStatus('PDF sin capa de texto. Aplicando OCR local (puede tardar)…');
+    joined=await ocrPdf(pdf,n);
+  }else{
+    $('#extractMode').textContent='PDF con capa de texto';
+  }
+  return joined;
+}
+
+async function ocrPdf(pdf,n){
+  const T=await ensureTesseract();
+  const worker=await T.createWorker('spa+eng');
+  let out=[];
+  for(let i=1;i<=n;i++){
+    const page=await pdf.getPage(i);
+    const viewport=page.getViewport({scale:2});
+    const canvas=el('canvas'); canvas.width=viewport.width; canvas.height=viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+    const {data}=await worker.recognize(canvas);
+    out.push(data.text);
+    setBar('#extractBar',(i/n)*100);
+    setExtractStatus(`OCR… página ${i}/${n}`);
+  }
+  await worker.terminate();
+  return out.join('\n\n');
+}
+
+// limpieza: quita encabezados/pies repetidos, números de página sueltos, espacios.
+function cleanText(t){
+  let lines=t.split(/\r?\n/);
+  // contar líneas cortas repetidas (encabezados/pies)
+  const freq={};
+  for(const l of lines){const k=l.trim();if(k.length>0&&k.length<70)freq[k]=(freq[k]||0)+1;}
+  const repeated=new Set(Object.entries(freq).filter(([k,v])=>v>=4&&k.length<70).map(([k])=>k));
+  lines=lines.filter(l=>{
+    const k=l.trim();
+    if(!k)return true;
+    if(/^\d{1,4}$/.test(k))return false;            // número de página suelto
+    if(repeated.has(k)&&k.length<60)return false;    // encabezado/pie recurrente
+    return true;
+  });
+  let out=lines.join('\n');
+  out=out.replace(/-\n(\w)/g,'$1');                  // guiones de corte de palabra
+  out=out.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').replace(/[ \t]{2,}/g,' ');
+  return out.trim();
+}
+
+function showExtractResult(){
+  $('#extractResult').classList.remove('hidden');
+  const t=P.cleanText||P.rawText;
+  $('#extractedText').value=t;
+  $('#stChars').textContent=t.length.toLocaleString('es');
+  $('#stWords').textContent=wc(t).toLocaleString('es');
+  const pages=Math.max(1,Math.round(wc(t)/450));
+  $('#stPages').textContent=pages;
+  if(!P.meta.pages)P.meta.pages=String(pages);
+  if(!$('#goSegment')){
+    $('#extractResult').append(el('div',{class:'row',style:'margin-top:12px'},
+      el('button',{class:'primary',id:'goSegment',onclick:()=>gotoStep(2)},'Continuar a estructura →')));
+  }
+}
+$('#btnSaveText').addEventListener('click',()=>{
+  P.cleanText=$('#extractedText').value;P.rawText=P.rawText||P.cleanText;
+  showExtractResult();touch();toast('Texto guardado');});
+
+/* ================================================================== *
+ *  STEP 2 — detección de estructura + segmentación en bloques
+ * ================================================================== */
+$('#btnSegment').addEventListener('click',segment);
+
+const CHAP_RE=new RegExp(
+  '^\\s*((?:CAP[IÍ]TULO|Cap[ií]tulo|T[IÍ]TULO|T[ií]tulo|SECCI[OÓ]N|Secci[oó]n|PARTE|Parte|LIBRO|Libro)'+
+  '\\s+(?:[IVXLCDM]+|\\d+|[A-ZÁÉÍ]+|primero|segundo|tercero|cuarto|quinto|sexto|s[eé]ptimo|octavo|noveno|d[eé]cimo)\\b.*)$'
+  ,'i');
+
+function detectChapters(text){
+  const lines=text.split(/\n/);
+  const heads=[];
+  for(let i=0;i<lines.length;i++){
+    const ln=lines[i].trim();
+    if(ln.length===0||ln.length>90)continue;
+    if(CHAP_RE.test(ln)){heads.push({line:i,title:ln});}
+  }
+  return heads;
+}
+
+function segment(){
+  const text=P.cleanText||P.rawText;
+  if(!text){toast('Primero extraiga el texto');return;}
+  const maxSize=Math.max(4000,+$('#blockSize').value||14000);
+  const lines=text.split(/\n/);
+  const heads=detectChapters(text);
+  let segments=[];
+  if(heads.length>=2){
+    for(let h=0;h<heads.length;h++){
+      const start=heads[h].line;
+      const end=h+1<heads.length?heads[h+1].line:lines.length;
+      segments.push({chapter:heads[h].title,text:lines.slice(start,end).join('\n').trim()});
+    }
+    // texto previo al primer capítulo (prólogo/portada)
+    if(heads[0].line>0){
+      const pre=lines.slice(0,heads[0].line).join('\n').trim();
+      if(wc(pre)>30)segments.unshift({chapter:'Preliminares / Introducción',text:pre});
+    }
+  }else{
+    // sin capítulos detectables: dividir por tamaño
+    segments=[{chapter:'Documento completo',text}];
+  }
+  // dividir segmentos grandes en sub-bloques por tamaño (respetando párrafos)
+  const blocks=[];
+  for(const seg of segments){
+    if(seg.text.length<=maxSize){blocks.push(seg);continue;}
+    const paras=seg.text.split(/\n\n+/);
+    let buf='',part=1;
+    const flush=()=>{if(buf.trim()){blocks.push({chapter:`${seg.chapter} — parte ${part}`,text:buf.trim()});buf='';part++;}};
+    for(const p of paras){
+      if((buf.length+p.length)>maxSize&&buf){flush();}
+      buf+=(buf?'\n\n':'')+p;
+      while(buf.length>maxSize*1.4){ // párrafo gigante: corte duro
+        blocks.push({chapter:`${seg.chapter} — parte ${part}`,text:buf.slice(0,maxSize)});
+        buf=buf.slice(maxSize);part++;
+      }
+    }
+    flush();
+  }
+  // preservar respuestas previas si re-segmentamos y el conteo coincide
+  const prev=P.blocks;
+  P.blocks=blocks.map((b,i)=>({
+    id:'b'+i,index:i+1,chapter:b.chapter,text:b.text,
+    response: (prev[i]&&prev[i].chapter===b.chapter)?prev[i].response:''
+  }));
+  renderBlocks();
+  $('#structInfo').innerHTML=`Capítulos detectados: <b>${heads.length}</b> · Bloques generados: <b>${P.blocks.length}</b>`;
+  touch();
+}
+
+function renderBlocks(){
+  $('#blocksPanel').classList.remove('hidden');
+  const tb=$('#blocksTable');tb.innerHTML='';
+  for(const b of P.blocks){
+    tb.append(el('tr',{},
+      el('td',{},String(b.index)),
+      el('td',{},b.chapter),
+      el('td',{},b.text.length.toLocaleString('es')),
+      el('td',{},el('span',{class:'pill '+(b.response?'done':'pend')},b.response?'✓ respondido':'pendiente'))
+    ));
+  }
+  if(!$('#goPrompts')){
+    $('#blocksPanel').append(el('div',{class:'row',style:'margin-top:12px'},
+      el('button',{class:'primary',id:'goPrompts',onclick:()=>gotoStep(3)},'Continuar a prompts →')));
+  }
+}
+
+/* ================================================================== *
+ *  STEP 3 — prompts por bloque
+ * ================================================================== */
+function blockPrompt(b){
+  const m=P.meta;
+  const ctx=[m.title&&`Obra: "${m.title}"`,m.author&&`Autor: ${m.author}`,
+    m.subject&&`Materia: ${m.subject}`,m.juris&&`Jurisdicción: ${m.juris}`].filter(Boolean).join(' · ');
+  return `Eres un jurista experto en análisis y síntesis doctrinal. Vas a resumir UN bloque de una obra jurídica extensa que se procesa por partes. Mantén rigor técnico y terminología jurídica precisa.
+
+${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+INSTRUCCIONES:
+1. Resume fielmente el contenido de este bloque, sin inventar ni añadir información externa.
+2. Conserva la estructura argumental y las definiciones jurídicas relevantes.
+3. Responde EXACTAMENTE con este formato (respeta los encabezados):
+
+### CAPÍTULO
+${b.chapter}
+
+### RESUMEN
+(8 a 15 líneas, denso y fiel)
+
+### PUNTOS CLAVE
+- (4 a 8 viñetas con las ideas/argumentos centrales)
+
+### CONCEPTOS
+- (5 a 12 conceptos jurídicos del bloque, uno por línea)
+
+### PALABRAS CLAVE
+(8 a 15 términos separados por comas, útiles para clasificación)
+
+--- TEXTO DEL BLOQUE ---
+${b.text}
+--- FIN DEL TEXTO ---`;
+}
+
+function renderPrompts(){
+  const sel=$('#promptBlockSel');sel.innerHTML='';
+  if(!P.blocks.length){$('#promptOut').textContent='No hay bloques. Vuelva al paso 3.';return;}
+  P.blocks.forEach(b=>sel.append(el('option',{value:b.id},`Bloque ${b.index} · ${b.chapter.slice(0,40)}`)));
+  sel.onchange=showPrompt; showPrompt();
+}
+function showPrompt(){
+  const b=P.blocks.find(x=>x.id===$('#promptBlockSel').value)||P.blocks[0];
+  $('#promptOut').textContent=blockPrompt(b);
+}
+$('#btnCopyPrompt').addEventListener('click',async()=>{
+  const b=P.blocks.find(x=>x.id===$('#promptBlockSel').value)||P.blocks[0];
+  await copy(blockPrompt(b));
+  $('#promptCopied').classList.remove('hidden');setTimeout(()=>$('#promptCopied').classList.add('hidden'),1500);
+  toast('Prompt copiado. Péguelo en Claude o ChatGPT.');
+});
+
+/* ================================================================== *
+ *  STEP 4 — pegar respuestas parciales
+ * ================================================================== */
+function renderResponses(){
+  const list=$('#respList');list.innerHTML='';
+  if(!P.blocks.length){list.append(el('p',{class:'muted'},'No hay bloques.'));return;}
+  for(const b of P.blocks){
+    const ta=el('textarea',{style:'min-height:120px'});ta.value=b.response||'';
+    ta.addEventListener('input',()=>{b.response=ta.value;updateRespStats();touch();
+      sum.querySelector('.pill').className='pill '+(b.response.trim()?'done':'pend');
+      sum.querySelector('.pill').textContent=b.response.trim()?'✓ respondido':'pendiente';});
+    const sum=el('summary',{},`Bloque ${b.index} · ${b.chapter} `,
+      el('span',{class:'pill '+(b.response?.trim()?'done':'pend')},b.response?.trim()?'✓ respondido':'pendiente'));
+    const det=el('details',{},sum,
+      el('div',{class:'row',style:'margin:8px 0'},
+        el('button',{class:'ghost copybtn',onclick:async()=>{await copy(blockPrompt(b));toast('Prompt del bloque copiado');}},'Copiar prompt de este bloque')),
+      ta);
+    list.append(det);
+  }
+  updateRespStats();
+  if(!$('#goConsol')){
+    list.append(el('div',{class:'row',style:'margin-top:14px'},
+      el('button',{class:'primary',id:'goConsol',onclick:()=>gotoStep(5)},'Continuar a consolidación →')));
+  }
+}
+function updateRespStats(){
+  const done=P.blocks.filter(b=>b.response?.trim()).length;
+  $('#stDone').textContent=done;$('#stTotal').textContent=P.blocks.length;
+  setBar('#respBar',P.blocks.length?done/P.blocks.length*100:0);
+}
+
+/* ================================================================== *
+ *  STEP 5 — consolidación
+ * ================================================================== */
+function consolidationPrompt(){
+  const m=P.meta;
+  const partials=P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
+  return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final.
+
+Datos conocidos de la obra:
+- Título: ${m.title||'(desconocido)'}
+- Autor: ${m.author||'(desconocido)'}
+- Año: ${m.year||'(desconocido)'}
+- Editorial: ${m.publisher||'(desconocida)'}
+- Materia principal: ${m.subject||'(desconocida)'}
+- Jurisdicción: ${m.juris||'(no indicada)'}
+
+Devuelve la respuesta EXACTAMENTE con los siguientes encabezados y reglas:
+
+## FICHA BIBLIOGRAFICA
+- Título:
+- Autor:
+- Año:
+- Editorial:
+- Edición:
+- Número de páginas:
+- Materia principal:
+- Submaterias: (separadas por comas)
+
+## SINTESIS EJECUTIVA
+(EXACTAMENTE 8 líneas, una idea por línea, que permitan recordar toda la obra en menos de un minuto)
+
+## RESUMEN MAESTRO
+(Resumen integral y ordenado de toda la obra, por capítulos, con la doctrina y argumentos centrales)
+
+## INDICE TEMATICO
+(Reconstruye el índice por capítulos a partir del resumen maestro. Una línea por entrada: "Capítulo X — Tema")
+
+## CONCEPTOS CLAVE
+(Entre 20 y 40 conceptos jurídicos, uno por línea con guion, SIN duplicados)
+
+## PALABRAS CLAVE
+(Entre 30 y 80 términos para clasificación documental, separados por comas, sin duplicados)
+
+--- RESÚMENES PARCIALES ---
+${partials}
+--- FIN ---`;
+}
+function renderConsolidation(){
+  $('#consolOut').textContent=consolidationPrompt();
+  $('#consolResponse').value=P.consolResponse||'';
+}
+$('#consolResponse').addEventListener('input',e=>{P.consolResponse=e.target.value;touch();});
+$('#btnCopyConsol').addEventListener('click',async()=>{await copy(consolidationPrompt());
+  $('#consolCopied').classList.remove('hidden');setTimeout(()=>$('#consolCopied').classList.add('hidden'),1500);
+  toast('Prompt de consolidación copiado');});
+$('#btnParseConsol').addEventListener('click',()=>{
+  if(!P.consolResponse.trim()){toast('Pegue primero la respuesta consolidada');return;}
+  P.products=parseConsolidation(P.consolResponse);
+  touch();gotoStep(6);toast('Consolidación procesada');
+});
+
+/* ---- parser de la respuesta consolidada ---- */
+function stripAccents(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'');}
+function splitSections(text){
+  // separa por encabezados ## XXXX
+  const re=/^#{1,6}\s*(.+?)\s*$/gm;
+  const idx=[];let mm;
+  while((mm=re.exec(text)))idx.push({title:mm[1],pos:mm.index,end:re.lastIndex});
+  const out={};
+  for(let i=0;i<idx.length;i++){
+    const body=text.slice(idx[i].end,(i+1<idx.length?idx[i+1].pos:text.length)).trim();
+    out[stripAccents(idx[i].title).toUpperCase().trim()]=body;
+  }
+  return out;
+}
+function listItems(body){
+  if(!body)return [];
+  return body.split(/\n/).map(l=>l.replace(/^[\s\-\*•\d.\)]+/,'').trim()).filter(Boolean);
+}
+function csvItems(body){
+  if(!body)return [];
+  return body.replace(/\n/g,',').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+}
+function dedupe(arr){const seen=new Set();return arr.filter(x=>{const k=stripAccents(x).toLowerCase();
+  if(seen.has(k)||!k)return false;seen.add(k);return true;});}
+
+function parseConsolidation(text){
+  const S=splitSections(text);
+  const get=(...keys)=>{for(const k of keys){for(const key of Object.keys(S)){
+    if(stripAccents(key).toUpperCase().includes(k))return S[key];}}return '';};
+  const fichaBody=get('FICHA');
+  const ficha=parseFicha(fichaBody);
+  const synthRaw=get('SINTESIS','SÍNTESIS EJEC','EXECUTIVE');
+  let synthLines=synthRaw.split(/\n/).map(l=>l.replace(/^[\s\-\*•\d.\)]+/,'').trim()).filter(Boolean);
+  const master=get('RESUMEN MAESTRO','MASTER','RESUMEN');
+  let indexBody=get('INDICE TEM','INDICE','THEMATIC','ÍNDICE');
+  let indexItems=listItems(indexBody);
+  if(!indexItems.length)indexItems=rebuildIndex(master);
+  let concepts=dedupe(listItems(get('CONCEPTOS')));
+  let keywords=dedupe(csvItems(get('PALABRAS CLAVE','KEYWORDS')));
+  // fusionar con metadatos conocidos si la ficha viene vacía
+  ficha.title=ficha.title||P.meta.title;
+  ficha.author=ficha.author||P.meta.author;
+  ficha.year=ficha.year||P.meta.year;
+  ficha.publisher=ficha.publisher||P.meta.publisher;
+  ficha.pages=ficha.pages||P.meta.pages;
+  ficha.subject=ficha.subject||P.meta.subject;
+  return {ficha,synthLines,master,indexItems,concepts,keywords,raw:text};
+}
+function parseFicha(body){
+  const f={title:'',author:'',year:'',publisher:'',edition:'',pages:'',subject:'',subsubjects:''};
+  const map=[['title',/t[ií]tulo/i],['author',/autor/i],['year',/a[ñn]o/i],['publisher',/editorial/i],
+    ['edition',/edici[oó]n/i],['pages',/p[aá]ginas/i],['subject',/materia principal/i],['subsubjects',/submaterias/i]];
+  for(const line of body.split(/\n/)){
+    const mm=line.match(/^[\s\-\*•]*([^:]+):\s*(.+)$/);if(!mm)continue;
+    const label=mm[1],val=mm[2].trim();
+    for(const[key,re]of map){if(re.test(label)){f[key]=val;break;}}
+  }
+  return f;
+}
+function rebuildIndex(master){
+  if(!master)return [];
+  const out=[];
+  for(const line of master.split(/\n/)){
+    const t=line.trim();
+    if(/^#{1,6}\s/.test(t)){out.push(t.replace(/^#+\s*/,''));continue;}
+    if(CHAP_RE.test(t)&&t.length<90)out.push(t.replace(/[*_#]/g,''));
+  }
+  return dedupe(out);
+}
+
+/* ================================================================== *
+ *  STEP 6 — productos finales + validaciones
+ * ================================================================== */
+function vbadge(ok,txt,warn){const cls=ok?'ok':(warn?'warn':'bad');
+  return el('span',{class:'check '+cls},(ok?'✓ ':warn?'! ':'✗ ')+txt);}
+function renderProducts(){
+  const v=$('#validation');v.innerHTML='';const pv=$('#productsView');pv.innerHTML='';
+  if(!P.products){pv.innerHTML='<p class="muted">Aún no hay productos. Complete la consolidación (paso 6).</p>';return;}
+  const pr=P.products;
+  // validaciones segun la especificacion
+  v.append(
+    vbadge(pr.synthLines.length===8,`Síntesis ejecutiva: ${pr.synthLines.length}/8 líneas`,pr.synthLines.length>0&&pr.synthLines.length!==8),
+    vbadge(pr.concepts.length>=20&&pr.concepts.length<=40,`Conceptos clave: ${pr.concepts.length} (20–40)`,pr.concepts.length>0),
+    vbadge(pr.keywords.length>=30&&pr.keywords.length<=80,`Palabras clave: ${pr.keywords.length} (30–80)`,pr.keywords.length>0),
+    vbadge(!!pr.master,'Resumen maestro',false),
+    vbadge(pr.indexItems.length>0,`Índice temático: ${pr.indexItems.length} entradas`,false),
+  );
+
+  // Ficha (editable)
+  const f=pr.ficha;
+  const fichaFields=[['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],
+    ['edition','Edición'],['pages','Número de páginas'],['subject','Materia principal'],['subsubjects','Submaterias']];
+  const fgrid=el('div',{class:'grid2'});
+  for(const[k,lbl]of fichaFields){
+    const inp=el('input',{type:'text',value:f[k]||''});
+    inp.addEventListener('input',()=>{f[k]=inp.value;touch();});
+    fgrid.append(el('div',{},el('label',{class:'fld'},lbl),inp));
+  }
+  pv.append(productBox('📇 Ficha bibliográfica',fgrid));
+
+  pv.append(productBox('📝 Síntesis ejecutiva (8 líneas)',
+    editableArea(pr.synthLines.join('\n'),val=>{pr.synthLines=val.split(/\n/).map(s=>s.trim()).filter(Boolean);renderProducts();},6)));
+
+  pv.append(productBox('📚 Resumen maestro',
+    editableArea(pr.master,val=>{pr.master=val;touch();},14)));
+
+  pv.append(productBox('🗂️ Índice temático',
+    editableArea(pr.indexItems.join('\n'),val=>{pr.indexItems=val.split(/\n/).map(s=>s.trim()).filter(Boolean);renderProducts();},8)));
+
+  const cChips=el('div',{},...pr.concepts.map(c=>el('span',{class:'tag'},c)));
+  pv.append(productBox(`💡 Conceptos clave (${pr.concepts.length})`,
+    el('div',{},cChips,editableArea(pr.concepts.join('\n'),val=>{pr.concepts=dedupe(val.split(/\n/).map(s=>s.trim()).filter(Boolean));renderProducts();},6))));
+
+  const kChips=el('div',{},...pr.keywords.map(c=>el('span',{class:'tag'},c)));
+  pv.append(productBox(`🔖 Palabras clave (${pr.keywords.length})`,
+    el('div',{},kChips,editableArea(pr.keywords.join(', '),val=>{pr.keywords=dedupe(csvItems(val));renderProducts();},4))));
+
+  if(!$('#goExport')){
+    pv.append(el('div',{class:'row',style:'margin-top:14px'},
+      el('button',{class:'primary',id:'goExport',onclick:()=>gotoStep(7)},'Continuar a exportar →')));
+  }
+}
+function productBox(title,...content){
+  const box=el('div',{class:'productbox panel',style:'background:var(--panel2)'},
+    el('h3',{},title),...content);
+  return box;
+}
+function editableArea(value,onsave,rows){
+  const ta=el('textarea',{style:`min-height:${(rows||6)*22}px`});ta.value=value||'';
+  let t;ta.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>onsave(ta.value),600);});
+  ta.addEventListener('blur',()=>onsave(ta.value));
+  return ta;
+}
+
+/* ================================================================== *
+ *  EXPORT — Markdown, DOCX (zip propio), Obsidian, JSON
+ * ================================================================== */
+function buildMarkdown(){
+  const pr=P.products; if(!pr)return '# (sin productos)';
+  const f=pr.ficha;
+  const L=[];
+  L.push(`# ${f.title||P.meta.title||'Documento jurídico'}`);
+  if(f.author)L.push(`*${f.author}*`);
+  L.push('');
+  L.push('## Ficha bibliográfica','');
+  L.push(`| Campo | Valor |`,`|---|---|`);
+  for(const[k,lbl]of [['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],['edition','Edición'],['pages','Páginas'],['subject','Materia principal'],['subsubjects','Submaterias']])
+    L.push(`| ${lbl} | ${(f[k]||'').replace(/\|/g,'\\|')} |`);
+  L.push('','## Síntesis ejecutiva','');
+  pr.synthLines.forEach((l,i)=>L.push(`${i+1}. ${l}`));
+  L.push('','## Índice temático','');
+  pr.indexItems.forEach(it=>L.push(`- ${it}`));
+  L.push('','## Resumen maestro','',pr.master||'');
+  L.push('','## Conceptos clave','');
+  pr.concepts.forEach(c=>L.push(`- ${c}`));
+  L.push('','## Palabras clave','',pr.keywords.join(', '));
+  return L.join('\n');
+}
+function buildObsidian(){
+  const pr=P.products; if(!pr)return '';
+  const f=pr.ficha;
+  const tags=pr.keywords.slice(0,25).map(k=>k.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi,'-').replace(/^-|-$/g,'')).filter(Boolean);
+  const esc=s=>String(s||'').replace(/"/g,'\\"');
+  const fm=['---',
+    `title: "${esc(f.title||P.meta.title)}"`,
+    `author: "${esc(f.author)}"`,
+    `year: "${esc(f.year)}"`,
+    `publisher: "${esc(f.publisher)}"`,
+    `edition: "${esc(f.edition)}"`,
+    `pages: "${esc(f.pages)}"`,
+    `subject: "${esc(f.subject)}"`,
+    `subsubjects: "${esc(f.subsubjects)}"`,
+    `type: resumen-juridico`,
+    `created: ${new Date().toISOString().slice(0,10)}`,
+    `tags: [${tags.map(t=>`"${t}"`).join(', ')}]`,
+    '---',''].join('\n');
+  const body=[`# ${f.title||P.meta.title||'Documento'}`,'',
+    '## Síntesis ejecutiva','',...pr.synthLines.map((l,i)=>`${i+1}. ${l}`),'',
+    '## Índice temático','',...pr.indexItems.map(i=>`- ${i}`),'',
+    '## Resumen maestro','',pr.master||'','',
+    '## Conceptos clave','',...pr.concepts.map(c=>`- ${c}`),'',
+    '## Palabras clave','',pr.keywords.map(k=>'#'+k.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi,'_')).join(' '),
+  ].join('\n');
+  return fm+body;
+}
+function download(name,blob){const a=el('a',{href:URL.createObjectURL(blob),download:name});
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
+function safeName(){return (P.meta.title||P.fileName||'resumen').replace(/[^\w\sáéíóúñ-]/gi,'').trim().replace(/\s+/g,'_').slice(0,60)||'resumen';}
+
+$('#btnExportMd').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'.md',new Blob([buildMarkdown()],{type:'text/markdown'}));toast('Markdown exportado');});
+$('#btnExportObsidian').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'_obsidian.md',new Blob([buildObsidian()],{type:'text/markdown'}));toast('Nota Obsidian exportada');});
+$('#btnExportJson').addEventListener('click',()=>{
+  download(safeName()+'_proyecto.json',new Blob([JSON.stringify(P,null,2)],{type:'application/json'}));toast('Proyecto exportado');});
+$('#btnExportDocx').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'.docx',buildDocx());toast('DOCX exportado');});
+
+/* ---------- DOCX generado sin librerías (OOXML + ZIP store) ---------- */
+function xmlEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pPara(text,opts={}){
+  const runs=(text||'').split(/\n/).map((ln,i)=>{
+    const br=i>0?'<w:br/>':'';
+    return `${br}<w:r><w:rPr>${opts.bold?'<w:b/>':''}${opts.size?`<w:sz w:val="${opts.size}"/>`:''}</w:rPr><w:t xml:space="preserve">${xmlEsc(ln)}</w:t></w:r>`;
+  }).join('');
+  const pPr=`<w:pPr>${opts.style?`<w:pStyle w:val="${opts.style}"/>`:''}${opts.spacing?'<w:spacing w:after="120"/>':''}</w:pPr>`;
+  return `<w:p>${pPr}${runs}</w:p>`;
+}
+function heading(text,lvl){return pPara(text,{bold:true,size:lvl===1?32:lvl===2?28:24,spacing:true,style:'Heading'+lvl});}
+function buildDocxXml(){
+  const pr=P.products,f=pr.ficha;const B=[];
+  B.push(heading(f.title||P.meta.title||'Documento jurídico',1));
+  if(f.author)B.push(pPara(f.author,{}));
+  B.push(heading('Ficha bibliográfica',2));
+  for(const[k,lbl]of [['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],['edition','Edición'],['pages','Páginas'],['subject','Materia principal'],['subsubjects','Submaterias']])
+    B.push(pPara(`${lbl}: ${f[k]||''}`,{}));
+  B.push(heading('Síntesis ejecutiva',2));
+  pr.synthLines.forEach((l,i)=>B.push(pPara(`${i+1}. ${l}`,{})));
+  B.push(heading('Índice temático',2));
+  pr.indexItems.forEach(it=>B.push(pPara('• '+it,{})));
+  B.push(heading('Resumen maestro',2));
+  (pr.master||'').split(/\n\n+/).forEach(p=>B.push(pPara(p,{spacing:true})));
+  B.push(heading('Conceptos clave',2));
+  pr.concepts.forEach(c=>B.push(pPara('• '+c,{})));
+  B.push(heading('Palabras clave',2));
+  B.push(pPara(pr.keywords.join(', '),{}));
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${B.join('')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`;
+}
+function buildDocx(){
+  const files={
+    '[Content_Types].xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+    '_rels/.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+    'word/document.xml':buildDocxXml(),
+  };
+  return zipStore(files);
+}
+/* ZIP (método store, sin compresión) — suficiente para DOCX */
+function zipStore(files){
+  const enc=new TextEncoder();
+  const chunks=[];let offset=0;const central=[];
+  const crcTable=zipStore._t||(zipStore._t=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;
+    for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})());
+  function crc32(buf){let c=0xFFFFFFFF;for(let i=0;i<buf.length;i++)c=crcTable[(c^buf[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+  function u16(n){return [n&0xFF,(n>>8)&0xFF];}
+  function u32(n){return [n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}
+  for(const[name,content]of Object.entries(files)){
+    const nameBytes=enc.encode(name);const data=enc.encode(content);
+    const crc=crc32(data);
+    const local=[...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(crc),...u32(data.length),...u32(data.length),...u16(nameBytes.length),...u16(0)];
+    chunks.push(new Uint8Array(local),nameBytes,data);
+    const localLen=local.length+nameBytes.length+data.length;
+    central.push({name:nameBytes,crc,size:data.length,offset});
+    offset+=localLen;
+  }
+  const cdStart=offset;const cd=[];
+  for(const c of central){
+    const rec=[...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(c.crc),...u32(c.size),...u32(c.size),...u16(c.name.length),...u16(0),...u16(0),
+      ...u16(0),...u16(0),...u32(0),...u32(c.offset)];
+    cd.push(new Uint8Array(rec),c.name);offset+=rec.length+c.name.length;
+  }
+  const cdSize=offset-cdStart;
+  const end=[...u32(0x06054b50),...u16(0),...u16(0),...u16(central.length),...u16(central.length),
+    ...u32(cdSize),...u32(cdStart),...u16(0)];
+  return new Blob([...chunks,...cd,new Uint8Array(end)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+/* ================================================================== *
+ *  PROYECTOS — nuevo, abrir, importar
+ * ================================================================== */
+$('#btnNew').addEventListener('click',()=>{
+  if(!confirm('¿Crear un nuevo proyecto? El actual queda guardado en la lista de proyectos.'))return;
+  DB.put(structuredCloneSafe(P));
+  P=blankProject();fileBuffer=null;
+  for(const id of Object.keys(metaMap))$('#'+id).value='';
+  $('#loadInfo').classList.add('hidden');$('#extractResult').classList.add('hidden');
+  $('#blocksPanel').classList.add('hidden');
+  setProjName();gotoStep(0);toast('Nuevo proyecto');
+});
+$('#btnOpen').addEventListener('click',openProjects);
+async function openProjects(){
+  const all=(await DB.all()).sort((a,b)=>b.updatedAt-a.updatedAt);
+  const w=el('div',{style:'position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:60'});
+  const card=el('div',{class:'panel',style:'max-width:560px;width:90%;max-height:80vh;overflow:auto'});
+  card.append(el('h2',{},'Proyectos guardados'));
+  const imp=el('input',{type:'file',accept:'.json',class:'hidden'});
+  imp.addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;
+    const data=JSON.parse(await file.text());data.id=data.id||uid();await DB.put(data);
+    w.remove();loadProject(data);});
+  card.append(el('div',{class:'row',style:'margin-bottom:10px'},
+    el('button',{class:'ghost',onclick:()=>imp.click()},'⬆ Importar .json'),imp,
+    el('button',{class:'ghost',onclick:()=>w.remove()},'Cerrar')));
+  if(!all.length)card.append(el('p',{class:'muted'},'No hay proyectos guardados todavía.'));
+  for(const pr of all){
+    const row=el('div',{class:'row',style:'justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0'},
+      el('div',{},el('b',{},pr.meta?.title||pr.fileName||'(sin título)'),
+        el('div',{class:'small muted'},`${new Date(pr.updatedAt).toLocaleString('es')} · ${pr.blocks?.length||0} bloques · paso ${(pr.step||0)+1}`)),
+      el('div',{class:'row'},
+        el('button',{class:'primary copybtn',onclick:()=>{w.remove();loadProject(pr);}},'Abrir'),
+        el('button',{class:'ghost copybtn',onclick:async()=>{if(confirm('¿Eliminar proyecto?')){await DB.del(pr.id);row.remove();}}},'🗑')));
+    card.append(row);
+  }
+  w.append(card);w.addEventListener('click',e=>{if(e.target===w)w.remove();});
+  document.body.append(w);
+}
+function loadProject(data){
+  P=data;fileBuffer=null;
+  $('#metaTitle').value=P.meta.title||'';$('#metaAuthor').value=P.meta.author||'';
+  $('#metaYear').value=P.meta.year||'';$('#metaPublisher').value=P.meta.publisher||'';
+  $('#metaSubject').value=P.meta.subject||'';$('#metaJuris').value=P.meta.juris||'';
+  if(P.fileName){$('#loadInfo').classList.remove('hidden');
+    $('#loadInfo').innerHTML=`<span class="pill done">✓ ${P.fileName}</span><span class="muted small">(reabra el archivo si necesita re-extraer)</span>`;}
+  if(P.cleanText||P.rawText)showExtractResult();
+  if(P.blocks?.length)renderBlocks();
+  setProjName();gotoStep(P.step||0);toast('Proyecto cargado');
+}
+
+/* ================================================================== *
+ *  INIT — recuperar último proyecto
+ * ================================================================== */
+(async()=>{
+  try{
+    const all=(await DB.all()).sort((a,b)=>b.updatedAt-a.updatedAt);
+    if(all.length){loadProject(all[0]);}
+    else{gotoStep(0);}
+  }catch(e){gotoStep(0);}
+})();
+window.addEventListener('beforeunload',()=>{try{DB.put(structuredCloneSafe(P));}catch(e){}});
+</script>
+</body>
+</html>
