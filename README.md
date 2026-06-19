@@ -70,9 +70,12 @@ ZIP/OOXML incluido), sin librerías externas.
 ## Funcionamiento sin conexión (offline total)
 
 TXT/Markdown, segmentación, prompts, consolidación, productos y exportación
-funcionan sin red. La extracción de PDF/DOCX y el OCR usan tres librerías que,
-por defecto, se cargan bajo demanda desde un CDN. Para uso 100% offline,
-descargue y vendorice esas librerías:
+funcionan sin red. Las librerías de PDF/DOCX/OCR se cargan **de forma perezosa
+real**: sólo se descargan la primera vez que se usan (no al abrir la app), así
+que abrir la herramienta para trabajar con TXT/MD no baja nada.
+
+Para uso 100% offline o en contextos sensibles, descargue y vendorice esas
+librerías en una carpeta `vendor/`:
 
 ```
 vendor/
@@ -81,8 +84,50 @@ vendor/
   mammoth.browser.min.js           (mammoth 1.x)
 ```
 
-y reemplace las URLs del objeto `CDN` en `index.html` por rutas locales
-(`vendor/...`). Tras ello, la aplicación no requiere conexión alguna.
+y active el modo local **sin editar código** definiendo la bandera antes de que
+cargue el script, p. ej. añadiendo en `index.html`:
+
+```html
+<script>window.RJA_LOCAL_VENDOR = true;</script>
+```
+
+(o cambie `USE_LOCAL_VENDOR` a `true` en el script). Con ello, el objeto `CDN`
+apunta a `vendor/...` y la aplicación no realiza ninguna petición de red.
+
+## Seguridad y privacidad
+
+- Los documentos **nunca se suben** a ningún servidor: el procesamiento es
+  local y el modelo lo opera el usuario manualmente.
+- En modo CDN (por defecto) la app **descarga código remoto** (las 3 librerías)
+  desde cdnjs/jsdelivr. No sube datos, pero ejecuta scripts de terceros. Para
+  contextos jurídicos sensibles use el modo `vendor/` local descrito arriba.
+- Las versiones del CDN están **fijadas** (pinning) para evitar sorpresas. Si
+  necesita verificación de integridad, vendorice y/o añada `integrity`/SRI.
+- La importación de proyectos `.json` se **valida y sanea** (`normalizeProject`)
+  antes de cargarse, de modo que un archivo corrupto no rompe la app.
+- No se guardan conversaciones, credenciales, cookies ni tokens.
+
+## Robustez
+
+- **Reanudación segura**: al reabrir un proyecto el botón de extracción queda
+  deshabilitado hasta volver a seleccionar el archivo original (no se puede
+  re-extraer sin el archivo en memoria).
+- **OCR configurable y cancelable**: escala 1.5×/2×/2.5× y botón *Cancelar*;
+  se libera la memoria de cada página tras procesarla.
+- **Aviso de archivos grandes** (>50 MB) antes de procesar.
+- **Parser de consolidación tolerante**: acepta encabezados con `##`, numerados
+  (`1.`), en negrita o sin marcado, y campos de ficha vacíos o con marcadores
+  como `(desconocido)`/`N/A`.
+- **Navegación guiada**: no se puede saltar a un paso sin cumplir los previos.
+
+## Pruebas
+
+Funciones puras con cobertura de regresión (parser, limpieza, detección de
+capítulos y escritor ZIP/DOCX con verificación de CRC):
+
+```
+npm test      # o: node tests/run.mjs
+```
 
 ## Arquitectura
 
