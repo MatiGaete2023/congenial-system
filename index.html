@@ -231,10 +231,13 @@
           <button id="btnExportAllPrompts" class="ghost copybtn">⬇ Descargar todos los prompts</button>
           <span id="promptCopied" class="check ok hidden">✓ copiado</span>
         </div>
-        <details open style="margin-top:12px"><summary>Fragmento del documento (lo que resumirá el modelo)</summary>
-          <pre class="out" id="blockTextOut"></pre></details>
-        <details style="margin-top:8px"><summary>Prompt completo (instrucciones + fragmento)</summary>
-          <pre class="out" id="promptOut"></pre></details>
+        <details open style="margin-top:12px"><summary>Fragmento del documento (editable; esto se enviará al modelo)</summary>
+          <textarea id="blockTextOut" style="min-height:260px;margin-top:8px"></textarea>
+          <div class="small muted" style="margin-top:6px">Editar este fragmento actualiza el prompt completo.</div>
+        </details>
+        <details open style="margin-top:8px"><summary>Prompt completo editable (instrucciones + fragmento)</summary>
+          <textarea id="promptOut" style="min-height:360px;margin-top:8px"></textarea>
+        </details>
       </div>
     </div>
 
@@ -780,26 +783,44 @@ function selectedBlock(){return P.blocks.find(x=>x.id===$('#promptBlockSel').val
 function renderPrompts(){
   const sel=$('#promptBlockSel');sel.innerHTML='';
   if(!P.blocks.length){
-    $('#blockTextOut').textContent='No hay bloques. Vuelva al paso 3 y pulse "Detectar y segmentar".';
-    $('#promptOut').textContent='';$('#promptMeta').textContent='';return;
+    $('#blockTextOut').value='No hay bloques. Vuelva al paso 3 y pulse "Detectar y segmentar".';
+    $('#promptOut').value='';$('#promptMeta').textContent='';return;
   }
   P.blocks.forEach(b=>sel.append(el('option',{value:b.id},`Bloque ${b.index} · ${b.chapter.slice(0,40)}`)));
   sel.onchange=showPrompt; showPrompt();
 }
 function showPrompt(){
   const b=selectedBlock(); if(!b)return;
-  $('#blockTextOut').textContent=b.text;
-  $('#promptOut').textContent=blockPrompt(b);
+  $('#blockTextOut').value=b.text;
+  $('#promptOut').value=blockPrompt(b);
   $('#promptMeta').textContent=`${b.text.length.toLocaleString('es')} caracteres · ~${approxTokens(blockPrompt(b)).toLocaleString('es')} tokens (estimado)`;
 }
+// El fragmento es editable: al corregirlo (quitar basura, ajustar el corte) se
+// actualiza P.blocks[n].text y se regenera el prompt completo.
+function syncPromptEditor(){
+  const b=selectedBlock(); if(!b)return null;
+  const txt=$('#blockTextOut').value;
+  if(txt!==b.text){
+    b.text=txt;
+    $('#promptOut').value=blockPrompt(b);
+    $('#promptMeta').textContent=`${b.text.length.toLocaleString('es')} caracteres · ~${approxTokens($('#promptOut').value).toLocaleString('es')} tokens (estimado)`;
+    touch();
+  }
+  return b;
+}
+$('#blockTextOut').addEventListener('input',syncPromptEditor);
+$('#promptOut').addEventListener('input',()=>{touch();});
 function flashCopied(){$('#promptCopied').classList.remove('hidden');
   setTimeout(()=>$('#promptCopied').classList.add('hidden'),1500);}
 $('#btnCopyPromptFull').addEventListener('click',async()=>{
-  await copy(blockPrompt(selectedBlock()));flashCopied();toast('Prompt + texto copiados. Péguelo en Claude o ChatGPT.');});
+  syncPromptEditor();
+  await copy($('#promptOut').value||blockPrompt(selectedBlock()));
+  flashCopied();toast('Prompt + texto copiados. Péguelo en Claude o ChatGPT.');});
 $('#btnCopyPromptOnly').addEventListener('click',async()=>{
   await copy(blockInstructions(selectedBlock()));flashCopied();toast('Instrucciones copiadas');});
 $('#btnCopyBlockText').addEventListener('click',async()=>{
-  await copy(selectedBlock().text);flashCopied();toast('Fragmento copiado');});
+  const b=syncPromptEditor()||selectedBlock();
+  await copy(b.text);flashCopied();toast('Fragmento copiado');});
 $('#btnExportAllPrompts').addEventListener('click',()=>{
   if(!P.blocks.length)return toast('No hay bloques');
   const all=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
