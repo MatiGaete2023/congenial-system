@@ -63,9 +63,31 @@ editables antes de exportar.
 | PDF con texto | `pdf.js` (extracción de capa de texto) |
 | PDF imagen | `pdf.js` + OCR local con `tesseract.js` (es+en) |
 | DOCX | `mammoth.js` |
+| Audio / vídeo (MP3, WAV, M4A, OGG, MP4, WEBM) | Transcripción **Whisper local** (`transformers.js`, modelo `whisper-tiny`) |
 
 La exportación a **Markdown y DOCX** se genera con código propio (un escritor
 ZIP/OOXML incluido), sin librerías externas.
+
+El audio/vídeo se decodifica en el navegador (Web Audio API) a 16 kHz mono y se
+transcribe con Whisper localmente. El modelo se descarga una sola vez (la primera
+transcripción) y queda cacheado; la transcripción resultante alimenta el mismo
+flujo de segmentación, prompts y consolidación.
+
+## Herramientas locales (evoluciones)
+
+Además del flujo de 8 pasos, hay dos herramientas que operan **100% en local**:
+
+- **🔎 Consultar (RAG local)**: búsqueda léxica **BM25** sobre el texto extraído
+  (sin red ni APIs). Escriba una pregunta y el sistema recupera los pasajes más
+  relevantes y genera un **prompt acotado** para pegar en Claude/ChatGPT que
+  responde *solo* con esos fragmentos (reduce alucinaciones y ahorra contexto en
+  libros de 500 páginas).
+- **🕸 Grafo conceptual**: grafo de co-ocurrencia entre los conceptos clave según
+  el resumen maestro, renderizado como **SVG** propio (sin librerías) y
+  exportable.
+
+El paso 4 incluye además **descarga de prompts agrupados en lotes** bajo un
+presupuesto de caracteres, para pegar menos veces en obras muy extensas.
 
 ## Funcionamiento sin conexión (offline total)
 
@@ -94,6 +116,11 @@ cargue el script, p. ej. añadiendo en `index.html`:
 (o cambie `USE_LOCAL_VENDOR` a `true` en el script). Con ello, el objeto `CDN`
 apunta a `vendor/...` y la aplicación no realiza ninguna petición de red.
 
+El botón **⚙ Offline/SRI** (cabecera) automatiza el vendorizado: descarga las
+4 librerías desde su propio equipo para que las coloque en `vendor/`, y **calcula
+los hashes SRI** (SHA-384) de cada una, generando el snippet
+`<script>window.RJA_SRI = { … }</script>` listo para pegar.
+
 ## Seguridad y privacidad
 
 - Los documentos **nunca se suben** a ningún servidor: el procesamiento es
@@ -101,8 +128,11 @@ apunta a `vendor/...` y la aplicación no realiza ninguna petición de red.
 - En modo CDN (por defecto) la app **descarga código remoto** (las 3 librerías)
   desde cdnjs/jsdelivr. No sube datos, pero ejecuta scripts de terceros. Para
   contextos jurídicos sensibles use el modo `vendor/` local descrito arriba.
-- Las versiones del CDN están **fijadas** (pinning) para evitar sorpresas. Si
-  necesita verificación de integridad, vendorice y/o añada `integrity`/SRI.
+- Las versiones del CDN están **fijadas** (pinning). En modo CDN se añade
+  `crossorigin="anonymous"` y, si se han fijado hashes en `window.RJA_SRI`, se
+  aplica **`integrity`/SRI** a cada librería (el navegador rechaza el recurso si
+  el hash no coincide). Los hashes se calculan con el botón **⚙ Offline/SRI**;
+  por defecto el mapa va vacío para no romper la carga con un hash incorrecto.
 - La importación de proyectos `.json` se **valida y sanea** (`normalizeProject`)
   antes de cargarse, de modo que un archivo corrupto no rompe la app.
 - No se guardan conversaciones, credenciales, cookies ni tokens.
@@ -119,6 +149,7 @@ apunta a `vendor/...` y la aplicación no realiza ninguna petición de red.
   (`1.`), en negrita o sin marcado, y campos de ficha vacíos o con marcadores
   como `(desconocido)`/`N/A`.
 - **Navegación guiada**: no se puede saltar a un paso sin cumplir los previos.
+- **Integridad SRI configurable** y vendorizado automático (botón ⚙ Offline/SRI).
 
 ## Pruebas
 

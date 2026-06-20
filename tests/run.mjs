@@ -32,13 +32,16 @@ function grabConst(re){ const m = script.match(re); if(!m) throw new Error('cons
 const pieces = [
   grabConst(/const CHAP_RE=new RegExp\([\s\S]*?\);/),
   grabConst(/const KNOWN_SECTIONS=\[[\s\S]*?\];/),
+  grabConst(/const STOPWORDS_ES=new Set\([\s\S]*?\);/),
   grabFn('stripAccents'), grabFn('headerKey'), grabFn('splitSections'),
   grabFn('listItems'), grabFn('csvItems'), grabFn('dedupe'), grabFn('cleanVal'),
   grabFn('parseFicha'), grabFn('cleanText'), grabFn('detectChapters'),
   grabFn('rebuildIndex'), grabFn('zipStore'),
+  grabFn('tokenize'), grabFn('splitPassages'), grabFn('bm25Search'),
+  grabFn('groupIntoLotes'), grabFn('buildConceptGraph'), grabFn('graphToSvg'),
 ];
 const factory = new Function(pieces.join('\n') +
-  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore};');
+  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg};');
 const A = factory();
 
 // --- mini framework ---
@@ -146,6 +149,32 @@ while (buf.readUInt32LE(p) === 0x04034b50){
 }
 eq(names.sort(), ['[Content_Types].xml','_rels/.rels','word/document.xml'], 'nombres de entradas DOCX');
 ok(crcOk, 'CRC de cada entrada coincide');
+
+// --- 9. tokenize: minúsculas, sin acentos, sin stopwords, min 3 ---
+eq(A.tokenize('El recurso de Casación, y la PRESCRIPCIÓN.'), ['recurso','casacion','prescripcion'], 'tokenize');
+
+// --- 10. splitPassages respeta tamaño y párrafos ---
+eq(A.splitPassages('aaaa\n\nbbbb\n\ncccc', 6).map(p=>p.text), ['aaaa','bbbb','cccc'], 'splitPassages');
+
+// --- 11. bm25Search rankea el pasaje relevante primero ---
+const PS = [
+  {id:0,text:'La prescripción extingue las acciones por el transcurso del tiempo'},
+  {id:1,text:'El recurso de casación procede contra sentencias definitivas'},
+  {id:2,text:'La prueba documental se rige por reglas especiales'},
+];
+const hits = A.bm25Search(PS, 'prescripción de acciones', 3);
+ok(hits.length >= 1 && hits[0].id === 0, 'bm25 prioriza el pasaje de prescripción');
+eq(A.bm25Search(PS, '', 3), [], 'bm25 con query vacía → []');
+
+// --- 12. groupIntoLotes agrupa bajo el presupuesto ---
+const LB = [{index:1,text:'x'.repeat(10)},{index:2,text:'y'.repeat(10)},{index:3,text:'z'.repeat(5)}];
+eq(A.groupIntoLotes(LB, 15).map(l=>l.map(b=>b.index)), [[1],[2,3]], 'groupIntoLotes');
+
+// --- 13. buildConceptGraph: co-ocurrencia por párrafo ---
+const G = A.buildConceptGraph(['prescripción','acción','recurso'],
+  'La prescripción y la acción civil.\nEl recurso de casación.', 1);
+eq(G.edges, [{a:0,b:1,w:1}], 'buildConceptGraph co-ocurrencia');
+ok(/^<svg/.test(A.graphToSvg(G)) && /prescripci/.test(A.graphToSvg(G)), 'graphToSvg renderiza nodos');
 
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);

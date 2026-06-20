@@ -115,6 +115,7 @@
   <span id="capDocx" class="badge off" title="Lectura de DOCX">DOCX</span>
   <button id="btnNew" class="ghost">Nuevo</button>
   <button id="btnOpen" class="ghost">Proyectos</button>
+  <button id="btnOffline" class="ghost" title="Modo sin conexión, descarga de librerías y verificación de integridad (SRI)">⚙ Offline/SRI</button>
 </header>
 
 <main>
@@ -128,6 +129,11 @@
       <li data-step="5"><span class="num">6</span> Consolidación</li>
       <li data-step="6"><span class="num">7</span> Productos finales</li>
       <li data-step="7"><span class="num">8</span> Exportar</li>
+    </ol>
+    <div class="small muted" style="padding:8px 12px 4px;text-transform:uppercase;letter-spacing:.05em;font-size:10px">Herramientas locales</div>
+    <ol id="toolNav">
+      <li data-step="8"><span class="num">🔎</span> Consultar (local)</li>
+      <li data-step="9"><span class="num">🕸</span> Grafo conceptual</li>
     </ol>
     <hr>
     <div class="small muted" style="padding:0 12px">
@@ -143,11 +149,11 @@
     <div class="step" data-step="0">
       <div class="panel">
         <h2>1 · Seleccionar archivo jurídico</h2>
-        <p class="help">Formatos: PDF (texto o imagen), DOCX, TXT, Markdown. Pensado para libros de 70 a 500 páginas. El archivo nunca sale de su equipo.</p>
+        <p class="help">Formatos: PDF (texto o imagen), DOCX, TXT, Markdown y audio/vídeo (transcripción Whisper local). Pensado para libros de 70 a 500 páginas. El archivo nunca sale de su equipo.</p>
         <div id="drop" class="drop">
           <p><b>Arrastre el documento aquí</b> o haga clic para elegir</p>
-          <p class="small muted">PDF · DOCX · TXT · MD</p>
-          <input id="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.markdown" class="hidden" />
+          <p class="small muted">PDF · DOCX · TXT · MD · audio/vídeo (MP3, WAV, M4A, OGG, MP4, WEBM)</p>
+          <input id="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.markdown,.mp3,.wav,.m4a,.ogg,.oga,.flac,.mp4,.webm,.mov" class="hidden" />
         </div>
         <div id="loadInfo" class="row hidden" style="margin-top:14px"></div>
       </div>
@@ -229,6 +235,9 @@
           <button id="btnCopyPromptOnly" class="ghost copybtn">Copiar solo instrucciones</button>
           <button id="btnCopyBlockText" class="ghost copybtn">Copiar solo el fragmento</button>
           <button id="btnExportAllPrompts" class="ghost copybtn">⬇ Descargar todos los prompts</button>
+          <label class="check" title="Agrupa bloques consecutivos en lotes bajo un presupuesto de caracteres, para pegar menos veces en libros largos">Lote (car.)
+            <input id="loteSize" type="number" value="24000" style="width:90px" /></label>
+          <button id="btnExportLotes" class="ghost copybtn">⬇ Descargar por lotes</button>
           <span id="promptCopied" class="check ok hidden">✓ copiado</span>
         </div>
         <details open style="margin-top:12px"><summary>Fragmento del documento (editable; esto se enviará al modelo)</summary>
@@ -295,6 +304,46 @@
           <button id="btnExportJson" class="ghost">⬇ Proyecto (.json)</button>
         </div>
         <p class="small muted" style="margin-top:12px">El .json permite respaldar/transferir el proyecto a otro equipo (Nuevo → Importar).</p>
+      </div>
+    </div>
+
+    <!-- STEP 8: RAG LOCAL -->
+    <div class="step hidden" data-step="8">
+      <div class="panel">
+        <h2>🔎 Consultar el documento (RAG local)</h2>
+        <p class="help">Búsqueda léxica local (BM25, sin red ni APIs) sobre el texto extraído. Escriba una pregunta; el sistema recupera los pasajes más relevantes y genera un <b>prompt acotado</b> para pegar en Claude/ChatGPT que responde <b>solo</b> con esos fragmentos (reduce alucinaciones y ahorra contexto en libros de 500 páginas).</p>
+        <div class="row">
+          <input id="ragQuery" type="text" placeholder="p. ej. ¿Qué requisitos exige para la prescripción extintiva?" style="flex:1;min-width:260px" />
+          <label class="check" title="Cuántos pasajes recuperar">Pasajes
+            <select id="ragK"><option>3</option><option selected>5</option><option>8</option></select></label>
+          <button id="btnRagSearch" class="primary">Buscar</button>
+        </div>
+        <div id="ragInfo" class="small muted" style="margin-top:8px"></div>
+        <div id="ragResults" style="margin-top:10px"></div>
+        <div id="ragPromptWrap" class="hidden" style="margin-top:12px">
+          <div class="row">
+            <button id="btnRagCopy" class="primary copybtn">Copiar prompt acotado</button>
+            <span id="ragCopied" class="check ok hidden">✓ copiado</span>
+          </div>
+          <details open style="margin-top:8px"><summary>Prompt acotado (pregunta + pasajes recuperados)</summary>
+            <textarea id="ragPrompt" style="min-height:240px;margin-top:8px"></textarea></details>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 9: CONCEPT GRAPH -->
+    <div class="step hidden" data-step="9">
+      <div class="panel">
+        <h2>🕸 Grafo conceptual</h2>
+        <p class="help">Grafo de co-ocurrencia entre los <b>conceptos clave</b> según cómo aparecen juntos en el resumen maestro. Se genera localmente (SVG, sin librerías). Requiere haber generado los productos (paso 7).</p>
+        <div class="row">
+          <label class="check" title="Fuerza mínima de co-ocurrencia para dibujar una arista">Umbral de enlace
+            <select id="graphMin"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select></label>
+          <button id="btnGraphBuild" class="primary">Generar grafo</button>
+          <button id="btnGraphSvg" class="ghost" disabled>⬇ Exportar SVG</button>
+        </div>
+        <div id="graphInfo" class="small muted" style="margin-top:8px"></div>
+        <div id="graphView" style="margin-top:10px;overflow:auto;background:#0d1117;border:1px solid var(--line);border-radius:8px"></div>
       </div>
     </div>
 
@@ -408,27 +457,31 @@ function setProjName(){$('#projName').textContent=P.meta.title||P.fileName||'Pro
  * ================================================================== */
 let current=0;
 function gotoStep(n){
-  current=n; P.step=Math.max(P.step,n); touch();
+  current=n; if(n<=7)P.step=Math.max(P.step,n); touch();   // 8/9 son herramientas, no avanzan el progreso
   $$('.step').forEach(s=>s.classList.toggle('hidden',+s.dataset.step!==n));
-  $$('#stepNav li').forEach(li=>{
+  $$('#stepNav li, #toolNav li').forEach(li=>{
     const i=+li.dataset.step;
     li.classList.toggle('active',i===n);
-    li.classList.toggle('done',i<P.step && i!==n || (i<n));
+    li.classList.toggle('done', i<=7 && ((i<P.step && i!==n) || (i<n && n<=7)));
   });
   if(n===3)renderPrompts();
   if(n===4)renderResponses();
   if(n===5)renderConsolidation();
   if(n===6)renderProducts();
   if(n===7)renderExportChecklist();
+  if(n===8)renderRag();
+  if(n===9)renderGraph();
 }
 function canEnterStep(n){
   if(n>=1 && !P.fileName && !P.cleanText && !P.rawText)return false;
   if(n>=2 && !(P.cleanText||P.rawText))return false;
-  if(n>=3 && !P.blocks.length)return false;
-  if(n>=6 && !P.products)return false;
+  if((n===3||n===4||n===5) && !P.blocks.length)return false;
+  if((n===6||n===7) && !P.products)return false;
+  if(n===8 && !(P.cleanText||P.rawText))return false;  // RAG sólo necesita texto
+  if(n===9 && !P.products)return false;                // grafo necesita productos
   return true;
 }
-$$('#stepNav li').forEach(li=>li.addEventListener('click',()=>{
+$$('#stepNav li, #toolNav li').forEach(li=>li.addEventListener('click',()=>{
   const n=+li.dataset.step;
   if(!canEnterStep(n)){toast('Complete primero los pasos anteriores');return;}
   gotoStep(n);
@@ -448,7 +501,7 @@ fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.f
 let fileBuffer=null; // ArrayBuffer del archivo actual (para extracción)
 async function loadFile(file){
   const ext=(file.name.split('.').pop()||'').toLowerCase();
-  if(!['pdf','docx','txt','md','markdown'].includes(ext)){toast('Formato no soportado');return;}
+  if(!['pdf','docx','txt','md','markdown'].includes(ext) && !AUDIO_EXT.has(ext)){toast('Formato no soportado');return;}
   if(file.size>50*1024*1024){
     if(!confirm(`El archivo pesa ${(file.size/1048576).toFixed(0)} MB. Procesarlo (y el OCR) puede consumir mucha memoria y tardar. ¿Continuar?`))return;
   }
@@ -479,20 +532,33 @@ for(const[id,key]of Object.entries(metaMap)){
 // librerías desde la carpeta local ./vendor/ en lugar del CDN. Útil para uso
 // 100% offline o en contextos sensibles (no ejecuta código remoto).
 const USE_LOCAL_VENDOR = (typeof window!=='undefined' && window.RJA_LOCAL_VENDOR===true);
-const CDN = USE_LOCAL_VENDOR ? {
-  pdf:'vendor/pdf.min.js',
-  pdfWorker:'vendor/pdf.worker.min.js',
-  tesseract:'vendor/tesseract.min.js',
-  mammoth:'vendor/mammoth.browser.min.js',
-} : {
+const REMOTE = {
   pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   pdfWorker:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
   tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
   mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+  transformers:'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2',
 };
+const VENDOR = {
+  pdf:'vendor/pdf.min.js', pdfWorker:'vendor/pdf.worker.min.js',
+  tesseract:'vendor/tesseract.min.js', mammoth:'vendor/mammoth.browser.min.js',
+  transformers:'vendor/transformers.min.js',
+};
+const CDN = USE_LOCAL_VENDOR ? VENDOR : REMOTE;
+// Verificación de integridad (Subresource Integrity). Vacío por defecto a
+// propósito: en modo CDN NO se fija integrity, porque un hash incorrecto
+// rompería la carga. Para activarlo SIN editar código, defina antes del script:
+//   <script>window.RJA_SRI = { '<url-cdn>':'sha384-…' }<\/script>
+// La herramienta «⚙ Offline/SRI» calcula estos hashes en su propio equipo.
+const SRI = Object.assign({}, (typeof window!=='undefined' && window.RJA_SRI) || {});
 function loadScript(src){return new Promise((res,rej)=>{
   if([...document.scripts].some(s=>s.src===src))return res();
-  const s=el('script',{src});s.onload=res;s.onerror=()=>rej(new Error('No se pudo cargar '+src));
+  const attrs={src};
+  if(!USE_LOCAL_VENDOR){                 // SRI/CORS sólo aplican a recursos remotos
+    attrs.crossorigin='anonymous';
+    if(SRI[src])attrs.integrity=SRI[src];
+  }
+  const s=el('script',attrs);s.onload=res;s.onerror=()=>rej(new Error('No se pudo cargar '+src));
   document.head.append(s);});}
 function markCap(id,ok){const node=$(id);if(!node)return;
   node.classList.toggle('ok',!!ok);node.classList.toggle('off',!ok);}
@@ -505,6 +571,45 @@ async function ensureMammoth(){await loadScript(CDN.mammoth);
   markCap('#capDocx',!!window.mammoth);return window.mammoth;}
 async function ensureTesseract(){await loadScript(CDN.tesseract);
   markCap('#capOcr',!!window.Tesseract);return window.Tesseract;}
+// Whisper local vía transformers.js (módulo ESM). El modelo se descarga una
+// sola vez (la primera transcripción) y queda cacheado por el navegador.
+const AUDIO_EXT=new Set(['mp3','wav','m4a','ogg','oga','flac','mp4','webm','mov']);
+let whisperPipe=null;
+async function ensureWhisper(progressCb){
+  if(whisperPipe)return whisperPipe;
+  const mod=await import(/* webpackIgnore: true */ CDN.transformers);
+  if(mod.env)mod.env.allowLocalModels=USE_LOCAL_VENDOR;   // en modo vendor, modelos locales
+  whisperPipe=await mod.pipeline('automatic-speech-recognition','Xenova/whisper-tiny',
+    {progress_callback:progressCb});
+  return whisperPipe;
+}
+// Decodifica cualquier audio/vídeo soportado por el navegador a PCM mono 16 kHz.
+async function decodeAudioTo16k(arrayBuffer){
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ctx=new AC();
+  const decoded=await ctx.decodeAudioData(arrayBuffer.slice(0));
+  if(ctx.close)ctx.close();
+  const off=new OfflineAudioContext(1,Math.max(1,Math.ceil(decoded.duration*16000)),16000);
+  const src=off.createBufferSource();src.buffer=decoded;src.connect(off.destination);src.start();
+  const rendered=await off.startRendering();
+  return rendered.getChannelData(0);
+}
+async function transcribeAudio(){
+  setExtractStatus('Cargando modelo Whisper (descarga única la primera vez)…');
+  const pipe=await ensureWhisper(p=>{
+    if(p&&p.status==='progress'&&p.progress!=null)
+      setExtractStatus(`Descargando modelo Whisper… ${Math.round(p.progress)}%`);
+  });
+  throwIfCancelled();
+  setExtractStatus('Decodificando audio…');setBar('#extractBar',40);
+  const pcm=await decodeAudioTo16k(fileBuffer);
+  throwIfCancelled();
+  setExtractStatus('Transcribiendo… (puede tardar varios minutos según la duración)');
+  setBar('#extractBar',60);
+  const out=await pipe(pcm,{chunk_length_s:30,stride_length_s:5,language:'spanish',task:'transcribe'});
+  setBar('#extractBar',95);
+  return ((out&&out.text)||'').trim();
+}
 
 function setBar(id,pct){$(id).style.width=Math.max(0,Math.min(100,pct))+'%';}
 function setExtractStatus(t){$('#extractStatus').textContent=t;}
@@ -536,6 +641,9 @@ async function extract(){
       text=r.value; setBar('#extractBar',80);
     }else if(P.fileType==='pdf'){
       text=await extractPdf(forceOcr);
+    }else if(AUDIO_EXT.has(P.fileType)){
+      $('#extractMode').textContent='Audio/vídeo → transcripción Whisper (local)';
+      text=await transcribeAudio();
     }
   }catch(err){
     console.error(err);
@@ -1236,6 +1344,238 @@ function zipStore(files){
   const end=[...u32(0x06054b50),...u16(0),...u16(0),...u16(central.length),...u16(central.length),
     ...u32(cdSize),...u32(cdStart),...u16(0)];
   return new Blob([...chunks,...cd,new Uint8Array(end)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+/* ================================================================== *
+ *  HERRAMIENTAS LOCALES — RAG (BM25), lotes, grafo conceptual.
+ *  Funciones puras, sin red ni librerías. Cubiertas por tests/run.mjs.
+ * ================================================================== */
+const STOPWORDS_ES=new Set(('a al algo alguna algunas alguno algunos ante antes como con contra cual cuando de del desde donde dos el ella ellas ello ellos en entre era erais eramos eran eres es esa esas ese eso esos esta estaba estan estar este esto estos fue fueron ha hace hacia han hasta hay la las le les lo los mas me mi mientras mucho muy nada ni no nos otra otras otro otros para pero poco por porque que quien se sea sean ser si sin sobre solo son su sus tal tambien tanto te tiene toda todas todo todos tras tu tus un una uno unos y ya').split(' '));
+function tokenize(s){
+  return stripAccents(String(s||'')).toLowerCase()
+    .replace(/[^a-z0-9ñ]+/g,' ').split(/\s+/)
+    .filter(w=>w.length>=3 && !STOPWORDS_ES.has(w));
+}
+// Divide el texto en pasajes ~size caracteres, respetando párrafos.
+function splitPassages(text,size=900){
+  const paras=String(text||'').split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
+  const out=[];let buf='';
+  const flush=()=>{if(buf.trim()){out.push(buf.trim());buf='';}};
+  for(const p of paras){
+    if(buf && (buf.length+p.length)>size)flush();
+    if(p.length>size*1.6){flush();for(let i=0;i<p.length;i+=size)out.push(p.slice(i,i+size));continue;}
+    buf+=(buf?'\n\n':'')+p;
+  }
+  flush();
+  return out.map((t,i)=>({id:i,text:t}));
+}
+// Recuperación léxica BM25 (Okapi). Devuelve los k pasajes más relevantes.
+function bm25Search(passages,query,k=5){
+  const qToks=[...new Set(tokenize(query))];
+  if(!passages.length||!qToks.length)return [];
+  const docs=passages.map(p=>tokenize(p.text));
+  const N=docs.length;
+  const avgdl=docs.reduce((s,d)=>s+d.length,0)/N||1;
+  const df={};
+  for(const d of docs)for(const t of new Set(d))df[t]=(df[t]||0)+1;
+  const k1=1.5,b=0.75;
+  return passages.map((p,i)=>{
+    const d=docs[i],dl=d.length||1,tf={};
+    for(const t of d)tf[t]=(tf[t]||0)+1;
+    let score=0;
+    for(const t of qToks){
+      if(!tf[t])continue;
+      const idf=Math.log(1+(N-df[t]+0.5)/(df[t]+0.5));
+      score+=idf*(tf[t]*(k1+1))/(tf[t]+k1*(1-b+b*dl/avgdl));
+    }
+    return {id:p.id,text:p.text,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,k);
+}
+// Agrupa bloques consecutivos en lotes bajo un presupuesto de caracteres.
+function groupIntoLotes(blocks,maxChars=24000){
+  const lotes=[];let cur=[],len=0;
+  for(const b of blocks){
+    const bl=(b.text||'').length;
+    if(cur.length && len+bl>maxChars){lotes.push(cur);cur=[];len=0;}
+    cur.push(b);len+=bl;
+  }
+  if(cur.length)lotes.push(cur);
+  return lotes;
+}
+// Grafo de co-ocurrencia: conceptos que aparecen en el mismo párrafo.
+function buildConceptGraph(concepts,text,minWeight=1){
+  const nodes=(concepts||[]).map(c=>String(c).trim()).filter(Boolean);
+  const keys=nodes.map(n=>stripAccents(n).toLowerCase());
+  const counts=nodes.map(()=>0);
+  const pairs=new Map();
+  for(const para of String(text||'').split(/\n+/)){
+    const low=stripAccents(para).toLowerCase();
+    const present=[];
+    for(let i=0;i<keys.length;i++)if(keys[i] && low.includes(keys[i])){present.push(i);counts[i]++;}
+    for(let a=0;a<present.length;a++)for(let c=a+1;c<present.length;c++){
+      const key=present[a]+'-'+present[c];
+      pairs.set(key,(pairs.get(key)||0)+1);
+    }
+  }
+  const edges=[];
+  for(const[key,w]of pairs)if(w>=minWeight){const[a,c]=key.split('-').map(Number);edges.push({a,b:c,w});}
+  return {nodes:nodes.map((n,i)=>({label:n,count:counts[i]})),edges};
+}
+// Renderiza un grafo {nodes,edges} a SVG (disposición circular determinista).
+function graphToSvg(graph,opts){
+  opts=opts||{};
+  const W=opts.w||760,H=opts.h||520,cx=W/2,cy=H/2,R=Math.min(W,H)/2-90;
+  const nodes=graph.nodes,edges=graph.edges,n=nodes.length||1;
+  const pos=nodes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;return {x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)};});
+  const maxW=edges.reduce((m,e)=>Math.max(m,e.w),1);
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  s+=`<rect width="${W}" height="${H}" fill="#0d1117"/>`;
+  for(const e of edges){const p=pos[e.a],q=pos[e.b];
+    s+=`<line x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${q.y.toFixed(1)}" stroke="#4f8cff" stroke-opacity="${(0.2+0.6*e.w/maxW).toFixed(2)}" stroke-width="${(1+2*e.w/maxW).toFixed(1)}"/>`;}
+  nodes.forEach((nd,i)=>{const p=pos[i],r=5+Math.min(10,nd.count);
+    const anchor=p.x<cx?'end':'start',dx=p.x<cx?-8:8;
+    s+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="#6ee7b7"/>`;
+    s+=`<text x="${(p.x+dx).toFixed(1)}" y="${(p.y+4).toFixed(1)}" fill="#e7edf3" font-size="12" font-family="sans-serif" text-anchor="${anchor}">${esc(nd.label)}</text>`;});
+  return s+`</svg>`;
+}
+
+/* ---- STEP 8: RAG local (UI) ---- */
+function renderRag(){
+  const has=!!(P.cleanText||P.rawText);
+  $('#ragInfo').textContent=has?'':'No hay texto extraído todavía (complete el paso 2).';
+}
+function ragPromptText(q,hits){
+  const ctx=hits.map((h,i)=>`[Pasaje ${i+1}]\n${h.text}`).join('\n\n');
+  return `Eres un asistente jurídico. Responde la PREGUNTA usando EXCLUSIVAMENTE los pasajes del documento que se incluyen abajo. Si la respuesta no está en ellos, indícalo claramente ("No consta en los fragmentos proporcionados"). Cita entre corchetes el número de pasaje en que te apoyas.
+
+PREGUNTA: ${q}
+
+--- PASAJES DEL DOCUMENTO ---
+${ctx}
+--- FIN ---`;
+}
+$('#btnRagSearch').addEventListener('click',()=>{
+  const q=$('#ragQuery').value.trim();
+  if(!q){toast('Escriba una pregunta');return;}
+  const corpus=splitPassages(P.cleanText||P.rawText||'',900);
+  if(!corpus.length){toast('No hay texto extraído (paso 2)');return;}
+  const k=+$('#ragK').value||5;
+  const hits=bm25Search(corpus,q,k);
+  const box=$('#ragResults');box.innerHTML='';
+  if(!hits.length){box.innerHTML='<p class="muted small">Sin coincidencias léxicas. Pruebe con otros términos.</p>';
+    $('#ragPromptWrap').classList.add('hidden');$('#ragInfo').textContent='';return;}
+  $('#ragInfo').textContent=`${hits.length} pasajes recuperados de ${corpus.length} · BM25 local`;
+  hits.forEach((h,i)=>{
+    const d=el('details',{},el('summary',{},`Pasaje ${i+1} · relevancia ${h.score.toFixed(2)}`),
+      el('pre',{class:'out',style:'max-height:200px'},h.text));
+    if(i===0)d.open=true;box.append(d);
+  });
+  $('#ragPrompt').value=ragPromptText(q,hits);
+  $('#ragPromptWrap').classList.remove('hidden');
+});
+$('#ragQuery').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnRagSearch').click();});
+$('#btnRagCopy').addEventListener('click',async()=>{await copy($('#ragPrompt').value);
+  $('#ragCopied').classList.remove('hidden');setTimeout(()=>$('#ragCopied').classList.add('hidden'),1500);
+  toast('Prompt acotado copiado');});
+
+/* ---- STEP 9: grafo conceptual (UI) ---- */
+let lastGraphSvg='';
+function renderGraph(){
+  if(!P.products){$('#graphInfo').textContent='Genere primero los productos (paso 7).';
+    $('#graphView').innerHTML='';$('#btnGraphSvg').disabled=true;}
+}
+$('#btnGraphBuild').addEventListener('click',()=>{
+  if(!P.products){toast('Genere primero los productos (paso 7)');return;}
+  const min=+$('#graphMin').value||1;
+  const g=buildConceptGraph(P.products.concepts,(P.products.master||'')+'\n'+(P.cleanText||''),min);
+  // limitar a los 30 conceptos más conectados para que el grafo sea legible
+  if(g.nodes.length>30){
+    const deg=g.nodes.map(()=>0);
+    for(const e of g.edges){deg[e.a]+=e.w;deg[e.b]+=e.w;}
+    const keep=[...g.nodes.keys()].sort((a,b)=>deg[b]-deg[a]).slice(0,30);
+    const keepSet=new Set(keep),remap=new Map(keep.map((old,ni)=>[old,ni]));
+    g.nodes=keep.map(i=>g.nodes[i]);
+    g.edges=g.edges.filter(e=>keepSet.has(e.a)&&keepSet.has(e.b))
+      .map(e=>({a:remap.get(e.a),b:remap.get(e.b),w:e.w}));
+  }
+  if(!g.edges.length){$('#graphInfo').textContent='No se hallaron co-ocurrencias con ese umbral. Baje el umbral.';
+    $('#graphView').innerHTML='';$('#btnGraphSvg').disabled=true;return;}
+  lastGraphSvg=graphToSvg(g);
+  $('#graphView').innerHTML=lastGraphSvg;
+  $('#graphInfo').textContent=`${g.nodes.length} conceptos · ${g.edges.length} enlaces (umbral ${min})`;
+  $('#btnGraphSvg').disabled=false;
+});
+$('#btnGraphSvg').addEventListener('click',()=>{if(!lastGraphSvg)return;
+  download(safeName()+'_grafo.svg',new Blob([lastGraphSvg],{type:'image/svg+xml'}));toast('Grafo SVG exportado');});
+
+/* ---- batch: descargar prompts agrupados en lotes ---- */
+$('#btnExportLotes').addEventListener('click',()=>{
+  if(!P.blocks.length)return toast('No hay bloques');
+  const max=Math.max(6000,+$('#loteSize').value||24000);
+  const lotes=groupIntoLotes(P.blocks,max);
+  const parts=lotes.map((lote,i)=>{
+    const head=`# Lote ${i+1}/${lotes.length} — bloques ${lote[0].index}–${lote[lote.length-1].index}`;
+    return head+'\n\n'+lote.map(b=>blockPrompt(b)).join('\n\n========\n\n');
+  });
+  download(safeName()+'_lotes.md',new Blob([parts.join('\n\n\n')],{type:'text/markdown'}));
+  toast(`${lotes.length} lote(s) generado(s)`);
+});
+
+/* ================================================================== *
+ *  OFFLINE / SRI — descarga de librerías para vendor/ y cálculo de
+ *  hashes de integridad (Subresource Integrity). Todo desde el equipo
+ *  del usuario; el sandbox de esta app nunca sube ni recibe datos.
+ * ================================================================== */
+const VENDOR_DL=[
+  [REMOTE.pdf,'pdf.min.js'],
+  [REMOTE.pdfWorker,'pdf.worker.min.js'],
+  [REMOTE.tesseract,'tesseract.min.js'],
+  [REMOTE.mammoth,'mammoth.browser.min.js'],
+];
+async function fetchLib(url){const r=await fetch(url,{mode:'cors'});
+  if(!r.ok)throw new Error('HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());}
+async function sha384(bytes){const h=await crypto.subtle.digest('SHA-384',bytes);
+  let bin='';for(const x of new Uint8Array(h))bin+=String.fromCharCode(x);return 'sha384-'+btoa(bin);}
+$('#btnOffline').addEventListener('click',openOffline);
+function openOffline(){
+  const w=el('div',{style:'position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:60'});
+  const card=el('div',{class:'panel',style:'max-width:660px;width:92%;max-height:85vh;overflow:auto'});
+  card.append(el('h2',{},'Modo sin conexión y verificación de integridad (SRI)'));
+  card.append(el('p',{class:'help'},
+    `Estado: ${USE_LOCAL_VENDOR?'modo VENDOR (librerías locales, sin red).':'modo CDN (cada librería se descarga de cdnjs/jsdelivr la primera vez que se usa).'} `
+    +(Object.keys(SRI).length?`Integridad SRI activa para ${Object.keys(SRI).length} recurso(s).`:'Sin hashes SRI fijados.')));
+  const log=el('pre',{class:'out',style:'max-height:280px;white-space:pre-wrap'},'');
+  const bDl=el('button',{class:'primary copybtn',onclick:async()=>{
+    let t='Descargando librerías (desde su equipo)…\n';log.textContent=t;
+    for(const[url,fn]of VENDOR_DL){
+      try{const bytes=await fetchLib(url);
+        download(fn,new Blob([bytes],{type:'application/javascript'}));
+        t+=`✓ ${fn} (${(bytes.length/1024).toFixed(0)} KB)\n`;}
+      catch(e){t+=`✗ ${fn}: ${e.message}\n`;}
+      log.textContent=t;
+    }
+    t+='\nColoque los 4 archivos en una carpeta vendor/ junto a index.html y\nactive el modo local: <script>window.RJA_LOCAL_VENDOR=true<\/script>';
+    log.textContent=t;
+  }},'⬇ Descargar librerías (vendor/)');
+  const bSri=el('button',{class:'ghost copybtn',onclick:async()=>{
+    let t='Calculando hashes SRI (SHA-384) desde su equipo…\n\n';log.textContent=t;
+    const map={};
+    for(const[url,fn]of VENDOR_DL){
+      try{const bytes=await fetchLib(url);const h=await sha384(bytes);map[url]=h;
+        t+=`${fn}\n  ${h}\n`;}
+      catch(e){t+=`${fn}\n  ✗ ${e.message}\n`;}
+      log.textContent=t;
+    }
+    t+='\nPegue esto en index.html ANTES del <script> principal para fijar la integridad:\n\n';
+    t+='<script>window.RJA_SRI = '+JSON.stringify(map,null,2)+';<\/script>';
+    log.textContent=t;
+  }},'🔒 Calcular hashes SRI');
+  card.append(el('div',{class:'row',style:'margin:8px 0'},bDl,bSri,
+    el('button',{class:'ghost copybtn',onclick:()=>w.remove()},'Cerrar')));
+  card.append(el('p',{class:'small muted'},'La descarga de librerías y el cálculo de hashes ocurren en su navegador y requieren red. La carpeta vendor/ permite uso 100% offline sin ejecutar código remoto.'));
+  card.append(log);
+  w.append(card);w.addEventListener('click',e=>{if(e.target===w)w.remove();});document.body.append(w);
 }
 
 /* ================================================================== *
