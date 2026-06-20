@@ -160,6 +160,9 @@ capítulos y escritor ZIP/DOCX con verificación de CRC):
 npm test      # o: node tests/run.mjs
 ```
 
+El desarrollo sigue el ciclo controlado descrito en [`AUTOLOOP.md`](AUTOLOOP.md)
+(objetivo → cambio mínimo → prueba → corrección, máx. 3 iteraciones, registro).
+
 ## Arquitectura
 
 ```
