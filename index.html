@@ -447,8 +447,11 @@ function normalizeProject(data){
 let P = blankProject();
 let saveTimer=null;
 function touch(){P.updatedAt=Date.now();clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{DB.put(structuredCloneSafe(P));
-    const s=$('#saveStatus');if(s)s.textContent='Guardado '+new Date().toLocaleTimeString('es');},400);}
+  saveTimer=setTimeout(()=>{
+    DB.put(structuredCloneSafe(P))
+      .then(()=>{const s=$('#saveStatus');if(s)s.textContent='Guardado '+new Date().toLocaleTimeString('es');})
+      .catch(()=>{const s=$('#saveStatus');if(s)s.textContent='⚠ Sin persistencia: este navegador bloquea el almacenamiento local en file://. Use un servidor local o exporte el .json. El proyecto sigue en memoria.';});
+  },400);}
 function structuredCloneSafe(o){return JSON.parse(JSON.stringify(o));}
 function setProjName(){$('#projName').textContent=P.meta.title||P.fileName||'Proyecto sin título';}
 
@@ -1583,7 +1586,7 @@ function openOffline(){
  * ================================================================== */
 $('#btnNew').addEventListener('click',()=>{
   if(!confirm('¿Crear un nuevo proyecto? El actual queda guardado en la lista de proyectos.'))return;
-  DB.put(structuredCloneSafe(P));
+  DB.put(structuredCloneSafe(P)).catch(()=>{});
   P=blankProject();fileBuffer=null;
   $('#btnExtract').disabled=true;
   for(const id of Object.keys(metaMap))$('#'+id).value='';
@@ -1652,7 +1655,7 @@ function loadProject(data){
     else{gotoStep(0);}
   }catch(e){gotoStep(0);}
 })();
-window.addEventListener('beforeunload',()=>{try{DB.put(structuredCloneSafe(P));}catch(e){}});
+window.addEventListener('beforeunload',()=>{try{DB.put(structuredCloneSafe(P)).catch(()=>{});}catch(e){}});
 </script>
 </body>
 </html>
