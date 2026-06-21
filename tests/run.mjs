@@ -39,9 +39,10 @@ const pieces = [
   grabFn('rebuildIndex'), grabFn('zipStore'),
   grabFn('tokenize'), grabFn('splitPassages'), grabFn('bm25Search'),
   grabFn('groupIntoLotes'), grabFn('buildConceptGraph'), grabFn('graphToSvg'),
+  grabFn('fragmentContent'),
 ];
 const factory = new Function(pieces.join('\n') +
-  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg};');
+  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg,fragmentContent};');
 const A = factory();
 
 // --- mini framework ---
@@ -175,6 +176,10 @@ const G = A.buildConceptGraph(['prescripción','acción','recurso'],
   'La prescripción y la acción civil.\nEl recurso de casación.', 1);
 eq(G.edges, [{a:0,b:1,w:1}], 'buildConceptGraph co-ocurrencia');
 ok(/^<svg/.test(A.graphToSvg(G)) && /prescripci/.test(A.graphToSvg(G)), 'graphToSvg renderiza nodos');
+
+// --- 14. fragmentContent: cabecera txt/md + texto ---
+eq(A.fragmentContent({index:3,chapter:'Cap I',text:'Hola'}, false), 'BLOQUE 3 — Cap I\n\nHola', 'fragmentContent txt');
+eq(A.fragmentContent({index:3,chapter:'Cap I',text:'Hola'}, true), '# Bloque 3 — Cap I\n\nHola', 'fragmentContent md');
 
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);

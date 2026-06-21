@@ -224,7 +224,7 @@
     <div class="step hidden" data-step="3">
       <div class="panel">
         <h2>4 · Prompts por bloque</h2>
-        <p class="help">Cada bloque contiene un <b>fragmento del documento</b> + las instrucciones. Elija el bloque, copie lo que necesite y péguelo en Claude o ChatGPT. La respuesta se registra en el paso 5.</p>
+        <p class="help">Cada bloque contiene un <b>fragmento del documento</b> + instrucciones. El prompt está diseñado para obtener resúmenes <b>específicos</b> (artículos, plazos, requisitos, definiciones y autores), no generales. Si el fragmento es <b>más grande de lo que admite el chat</b>, use <b>Modo adjunto</b>: descarga el texto como archivo, adjúntelo en Claude/ChatGPT y pegue solo el prompt.</p>
         <div class="row">
           <label class="fld" style="margin:0" for="promptBlockSel">Bloque</label>
           <select id="promptBlockSel"></select>
@@ -239,6 +239,13 @@
             <input id="loteSize" type="number" value="24000" style="width:90px" /></label>
           <button id="btnExportLotes" class="ghost copybtn">⬇ Descargar por lotes</button>
           <span id="promptCopied" class="check ok hidden">✓ copiado</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnAttachPrompt" class="primary copybtn" title="Para fragmentos grandes: descarga el texto como archivo y copia solo el prompt; pegue el prompt en el chat y adjunte el archivo">📎 Modo adjunto (fragmento grande)</button>
+          <button id="btnDownloadFragment" class="ghost copybtn">⬇ Fragmento .txt</button>
+          <button id="btnDownloadFragmentMd" class="ghost copybtn">⬇ Fragmento .md</button>
+          <button id="btnExportAllFragments" class="ghost copybtn">⬇ Todos los fragmentos (.zip)</button>
+          <label class="check" title="Pide a Claude/ChatGPT entregar la respuesta como artefacto (Claude) o canvas (ChatGPT): más larga y completa"><input type="checkbox" id="optArtifact" checked> Pedir artefacto/canvas</label>
         </div>
         <details open style="margin-top:12px"><summary>Fragmento del documento (editable; esto se enviará al modelo)</summary>
           <textarea id="blockTextOut" style="min-height:260px;margin-top:8px"></textarea>
@@ -854,33 +861,53 @@ function renderBlocks(){
  *  STEP 3 — prompts por bloque
  * ================================================================== */
 function approxTokens(s){return Math.ceil((s||'').length/4);}  // estimación gruesa
+// Nota opcional para pedir la respuesta como artefacto/canvas (más larga y completa).
+function artifactNote(){
+  return ($('#optArtifact')&&$('#optArtifact').checked)
+    ? `\n\nFORMATO DE ENTREGA: entrega la respuesta como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown, como documento extenso y completo. No la abrevies ni la recortes para que "quepa" en el chat: prioriza el detalle sobre la brevedad.`
+    : '';
+}
 function blockInstructions(b){
   const m=P.meta;
   const ctx=[m.title&&`Obra: "${m.title}"`,m.author&&`Autor: ${m.author}`,
     m.subject&&`Materia: ${m.subject}`,m.juris&&`Jurisdicción: ${m.juris}`].filter(Boolean).join(' · ');
-  return `Eres un jurista experto en análisis y síntesis doctrinal. Vas a resumir UN bloque de una obra jurídica extensa que se procesa por partes. Mantén rigor técnico y terminología jurídica precisa.
+  return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un resumen ESPECÍFICO Y DETALLADO, NO un resumen general.
 
 ${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
 
-INSTRUCCIONES:
-1. Resume fielmente el contenido de este bloque, sin inventar ni añadir información externa.
-2. Conserva la estructura argumental y las definiciones jurídicas relevantes.
-3. Responde EXACTAMENTE con este formato (respeta los encabezados):
+REGLAS DE ESPECIFICIDAD (obligatorias):
+1. Prohibido el lenguaje vago o de relleno ("trata sobre", "aborda diversos aspectos", "entre otros", "en general", "varios"). Si lo usas, reescríbelo con el dato concreto.
+2. Cita de forma exacta TODO lo que el texto mencione: artículos, incisos, numerales, leyes, plazos, montos, requisitos, autores, sentencias o tribunales, con su numeración literal.
+3. Reproduce las definiciones jurídicas con su contenido esencial (no escribas "define la prescripción", escribe la definición).
+4. Si el texto enumera requisitos, elementos, efectos o excepciones, enuméralos TODOS y por separado; nunca como "varios" o "ciertos".
+5. Atribuye cada postura doctrinal a su autor y cada criterio a su tribunal/sentencia.
+6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).
+
+Responde EXACTAMENTE con este formato (respeta los encabezados):
 
 ### CAPÍTULO
 ${b.chapter}
 
-### RESUMEN
-(8 a 15 líneas, denso y fiel)
+### RESUMEN DETALLADO
+(Mínimo 15–25 líneas. Denso, fiel y ESPECÍFICO: ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Cada idea debe entenderse sin leer el original.)
+
+### DEFINICIONES
+- término — definición esencial tal como la da el texto (todas las que aparezcan)
+
+### NORMAS, REQUISITOS Y PLAZOS
+- (cada artículo/regla/requisito/plazo citado, uno por línea, con su numeración exacta; si no hay, escribe "No se citan en este bloque")
+
+### POSTURAS DOCTRINALES Y JURISPRUDENCIA
+- autor o tribunal — tesis/criterio (si no hay, escribe "No se citan en este bloque")
 
 ### PUNTOS CLAVE
-- (4 a 8 viñetas con las ideas/argumentos centrales)
+- (5 a 10 viñetas con los argumentos centrales, concretos)
 
 ### CONCEPTOS
-- (5 a 12 conceptos jurídicos del bloque, uno por línea)
+- (conceptos jurídicos del bloque, uno por línea)
 
 ### PALABRAS CLAVE
-(8 a 15 términos separados por comas, útiles para clasificación)`;
+(términos separados por comas, útiles para clasificación)`+artifactNote();
 }
 function blockPrompt(b){
   return `${blockInstructions(b)}
@@ -888,6 +915,20 @@ function blockPrompt(b){
 --- TEXTO DEL BLOQUE ---
 ${b.text}
 --- FIN DEL TEXTO ---`;
+}
+// Para fragmentos más grandes que el cuadro de chat: se descarga el texto como
+// archivo y se pega solo el prompt, indicando que el texto va adjunto.
+function fragmentContent(b,md){
+  const head=md?`# Bloque ${b.index} — ${b.chapter}\n\n`:`BLOQUE ${b.index} — ${b.chapter}\n\n`;
+  return head+(b.text||'');
+}
+function fragmentFileName(b,ext){return safeName()+`_bloque_${String(b.index).padStart(2,'0')}.${ext}`;}
+function attachNote(b){
+  return `\n\n📎 IMPORTANTE: el TEXTO DEL BLOQUE ${b.index} se entrega como ARCHIVO ADJUNTO a este mensaje (no está pegado aquí por su tamaño). Analízalo íntegramente desde el adjunto y aplica las instrucciones anteriores.`;
+}
+function downloadFragment(b,md){
+  download(fragmentFileName(b,md?'md':'txt'),
+    new Blob([fragmentContent(b,md)],{type:md?'text/markdown':'text/plain'}));
 }
 function selectedBlock(){return P.blocks.find(x=>x.id===$('#promptBlockSel').value)||P.blocks[0];}
 
@@ -936,6 +977,23 @@ $('#btnExportAllPrompts').addEventListener('click',()=>{
   if(!P.blocks.length)return toast('No hay bloques');
   const all=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
   download(safeName()+'_prompts.md',new Blob([all],{type:'text/markdown'}));toast('Prompts exportados');});
+// Modo adjunto + descarga de fragmentos (para fragmentos grandes)
+$('#optArtifact').addEventListener('change',showPrompt);
+$('#btnDownloadFragment').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
+  if(!b)return toast('No hay bloque');downloadFragment(b,false);toast('Fragmento .txt descargado');});
+$('#btnDownloadFragmentMd').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
+  if(!b)return toast('No hay bloque');downloadFragment(b,true);toast('Fragmento .md descargado');});
+$('#btnAttachPrompt').addEventListener('click',async()=>{
+  const b=syncPromptEditor()||selectedBlock();if(!b)return toast('No hay bloque');
+  downloadFragment(b,false);
+  await copy(blockInstructions(b)+attachNote(b));
+  flashCopied();toast('Fragmento descargado y prompt copiado. Pegue el prompt y adjunte el archivo en el chat.');});
+$('#btnExportAllFragments').addEventListener('click',()=>{
+  if(!P.blocks.length)return toast('No hay bloques');
+  const files={};
+  P.blocks.forEach(b=>{files[`bloque_${String(b.index).padStart(2,'0')}.txt`]=fragmentContent(b,false);});
+  download(safeName()+'_fragmentos.zip',zipStore(files));
+  toast(`${P.blocks.length} fragmento(s) en .zip`);});
 
 /* ================================================================== *
  *  STEP 4 — pegar respuestas parciales
@@ -952,7 +1010,9 @@ function renderResponses(){
       el('span',{class:'pill '+(b.response?.trim()?'done':'pend')},b.response?.trim()?'✓ respondido':'pendiente'));
     const det=el('details',{},sum,
       el('div',{class:'row',style:'margin:8px 0'},
-        el('button',{class:'ghost copybtn',onclick:async()=>{await copy(blockPrompt(b));toast('Prompt del bloque copiado');}},'Copiar prompt de este bloque')),
+        el('button',{class:'ghost copybtn',onclick:async()=>{await copy(blockPrompt(b));toast('Prompt del bloque copiado');}},'Copiar prompt de este bloque'),
+        el('button',{class:'ghost copybtn',onclick:()=>{downloadFragment(b,false);toast('Fragmento descargado');}},'⬇ Fragmento'),
+        el('button',{class:'ghost copybtn',title:'Descarga el fragmento y copia solo el prompt (con nota de adjunto)',onclick:async()=>{downloadFragment(b,false);await copy(blockInstructions(b)+attachNote(b));toast('Fragmento descargado + prompt copiado. Adjunte el archivo en el chat.');}},'📎 Adjunto')),
       ta);
     list.append(det);
   }
@@ -974,7 +1034,9 @@ function updateRespStats(){
 function consolidationPrompt(){
   const m=P.meta;
   const partials=P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
-  return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final.
+  return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final ESPECÍFICO Y DETALLADO, no general.
+
+Reglas: conserva la especificidad de los parciales (artículos, incisos, plazos, requisitos, definiciones, autores y sentencias con su numeración exacta). Prohibido el lenguaje vago ("trata sobre", "diversos aspectos", "varios"). No inventes datos que no estén en los parciales. Si tu interfaz lo permite, entrega el resultado como ARTEFACTO/CANVAS en Markdown (respetando los encabezados de abajo) para no truncar la extensión.
 
 Datos conocidos de la obra:
 - Título: ${m.title||'(desconocido)'}
@@ -1000,7 +1062,7 @@ Devuelve la respuesta EXACTAMENTE con los siguientes encabezados y reglas:
 (EXACTAMENTE 8 líneas, una idea por línea, que permitan recordar toda la obra en menos de un minuto)
 
 ## RESUMEN MAESTRO
-(Resumen integral y ordenado de toda la obra, por capítulos, con la doctrina y argumentos centrales)
+(Resumen integral por capítulos, ESPECÍFICO y extenso: conserva artículos, plazos, requisitos, definiciones textuales, posturas doctrinales con su autor y criterios jurisprudenciales con su tribunal. Cada capítulo debe poder entenderse sin el original. No generalices ni abrevies para "ahorrar espacio".)
 
 ## INDICE TEMATICO
 (Reconstruye el índice por capítulos a partir del resumen maestro. Una línea por entrada: "Capítulo X — Tema")
@@ -1450,7 +1512,7 @@ function renderRag(){
 }
 function ragPromptText(q,hits){
   const ctx=hits.map((h,i)=>`[Pasaje ${i+1}]\n${h.text}`).join('\n\n');
-  return `Eres un asistente jurídico. Responde la PREGUNTA usando EXCLUSIVAMENTE los pasajes del documento que se incluyen abajo. Si la respuesta no está en ellos, indícalo claramente ("No consta en los fragmentos proporcionados"). Cita entre corchetes el número de pasaje en que te apoyas.
+  return `Eres un asistente jurídico. Responde la PREGUNTA de forma ESPECÍFICA y detallada (con artículos, plazos, requisitos y citas textuales cuando proceda), usando EXCLUSIVAMENTE los pasajes del documento que se incluyen abajo. No generalices. Si la respuesta no está en ellos, indícalo claramente ("No consta en los fragmentos proporcionados"). Cita entre corchetes el número de pasaje en que te apoyas.
 
 PREGUNTA: ${q}
 

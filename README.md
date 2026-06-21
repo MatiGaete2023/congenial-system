@@ -18,7 +18,12 @@ ocurre en el navegador del usuario; el documento nunca sale del equipo.
       es imagen, limpieza de encabezados/pies y normalización.
    3. **Estructura y bloques** — detección de capítulos y segmentación
       automática (los capítulos largos se dividen por tamaño).
-   4. **Prompts por bloque** — copia un prompt optimizado para cada bloque.
+   4. **Prompts por bloque** — copia un prompt diseñado para respuestas
+      **específicas** (artículos, plazos, requisitos, definiciones textuales y
+      autores), no generales, con opción de pedir **artefacto/canvas** para
+      respuestas más extensas. Si el fragmento excede el tamaño del chat, use
+      **Modo adjunto**: descarga el fragmento (`.txt`/`.md`, o todos en `.zip`)
+      para adjuntarlo y pega solo el prompt.
    5. **Pegar respuestas** — pegue la respuesta de Claude/ChatGPT por bloque.
    6. **Consolidación** — copia un prompt que pide todos los productos en
       formato estructurado; pegue la respuesta consolidada.
