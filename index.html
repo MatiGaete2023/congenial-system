@@ -246,6 +246,13 @@
           <button id="btnDownloadFragmentMd" class="ghost copybtn">⬇ Fragmento .md</button>
           <button id="btnExportAllFragments" class="ghost copybtn">⬇ Todos los fragmentos (.zip)</button>
           <label class="check" title="Pide a Claude/ChatGPT entregar la respuesta como artefacto (Claude) o canvas (ChatGPT): más larga y completa"><input type="checkbox" id="optArtifact" checked> Pedir artefacto/canvas</label>
+          <label class="check" title="Nivel de detalle del análisis por bloque">Detalle:
+            <select id="promptDepth" style="width:auto;display:inline-block;margin-left:6px">
+              <option value="breve">Breve</option>
+              <option value="estandar" selected>Estándar</option>
+              <option value="exhaustivo">Exhaustivo</option>
+            </select>
+          </label>
         </div>
         <details open style="margin-top:12px"><summary>Fragmento del documento (editable; esto se enviará al modelo)</summary>
           <textarea id="blockTextOut" style="min-height:260px;margin-top:8px"></textarea>
@@ -867,21 +874,94 @@ function artifactNote(){
     ? `\n\nFORMATO DE ENTREGA: entrega la respuesta como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown, como documento extenso y completo. No la abrevies ni la recortes para que "quepa" en el chat: prioriza el detalle sobre la brevedad.`
     : '';
 }
-function blockInstructions(b){
+function blockInstructions(b,depthOverride){
   const m=P.meta;
   const ctx=[m.title&&`Obra: "${m.title}"`,m.author&&`Autor: ${m.author}`,
     m.subject&&`Materia: ${m.subject}`,m.juris&&`Jurisdicción: ${m.juris}`].filter(Boolean).join(' · ');
-  return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un resumen ESPECÍFICO Y DETALLADO, NO un resumen general.
+  const depth=depthOverride||(($('#promptDepth')&&$('#promptDepth').value)||'estandar');
 
-${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
-
-REGLAS DE ESPECIFICIDAD (obligatorias):
+  const reglas=`REGLAS DE ESPECIFICIDAD (obligatorias):
 1. Prohibido el lenguaje vago o de relleno ("trata sobre", "aborda diversos aspectos", "entre otros", "en general", "varios"). Si lo usas, reescríbelo con el dato concreto.
 2. Cita de forma exacta TODO lo que el texto mencione: artículos, incisos, numerales, leyes, plazos, montos, requisitos, autores, sentencias o tribunales, con su numeración literal.
 3. Reproduce las definiciones jurídicas con su contenido esencial (no escribas "define la prescripción", escribe la definición).
 4. Si el texto enumera requisitos, elementos, efectos o excepciones, enuméralos TODOS y por separado; nunca como "varios" o "ciertos".
 5. Atribuye cada postura doctrinal a su autor y cada criterio a su tribunal/sentencia.
-6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).
+6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).`;
+
+  const citasTextuales=`7. CITAS TEXTUALES: cuando el texto incluya una definición, principio o afirmación relevante, transcríbela de forma literal entre comillas, indicando el número de página si aparece en el texto (ej: "La prescripción extingue…" — p. 134).`;
+
+  if(depth==='breve'){
+    return `Eres un jurista experto. Analiza el siguiente bloque de una obra jurídica y entrega un resumen BREVE Y ESPECÍFICO.
+
+${ctx?`Contexto: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${reglas}
+
+Responde con este formato:
+
+### CAPÍTULO
+${b.chapter}
+
+### SÍNTESIS
+(5–8 líneas, específicas: artículos, plazos, requisitos concretos del bloque)
+
+### CONCEPTOS
+- (uno por línea)
+
+### PALABRAS CLAVE
+(separadas por comas)`+artifactNote();
+  }
+
+  if(depth==='exhaustivo'){
+    return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un análisis EXHAUSTIVO, ESPECÍFICO Y DETALLADO, con citas textuales.
+
+${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${reglas}
+${citasTextuales}
+8. Para cada norma citada, explica su estructura lógica completa: supuesto de hecho → consecuencia jurídica → excepciones.
+9. Para cada concepto, da: (a) definición según el texto, (b) elementos esenciales, (c) distinción de figuras afines si el texto las menciona.
+
+Responde EXACTAMENTE con este formato:
+
+### CAPÍTULO
+${b.chapter}
+
+### ANÁLISIS EXHAUSTIVO
+(Mínimo 30–40 líneas. Desarrolla cada idea con todos sus elementos, artículos, plazos y matices. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece.)
+
+### DEFINICIONES Y CONCEPTOS
+- término — definición literal del texto + elementos esenciales + distinción de figuras afines (si las hay)
+
+### NORMAS, REQUISITOS Y PLAZOS
+- artículo/regla — supuesto de hecho | consecuencia | excepción (toda la información del texto, con numeración exacta)
+
+### CITAS TEXTUALES RELEVANTES
+- "cita literal" — (p. XX si figura) — por qué es relevante
+
+### POSTURAS DOCTRINALES Y JURISPRUDENCIA
+- autor o tribunal — tesis/criterio completo
+
+### ESTRUCTURA ARGUMENTAL
+(Cómo el autor construye el argumento en este bloque: premisas → desarrollo → conclusión)
+
+### PUNTOS CLAVE
+- (8 a 15 viñetas con los argumentos centrales, concretos)
+
+### CONCEPTOS
+- (todos los conceptos jurídicos del bloque, uno por línea)
+
+### PALABRAS CLAVE
+(términos separados por comas, útiles para clasificación)`+artifactNote();
+  }
+
+  // estandar (default)
+  return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un resumen ESPECÍFICO Y DETALLADO, NO un resumen general.
+
+${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${reglas}
+${citasTextuales}
 
 Responde EXACTAMENTE con este formato (respeta los encabezados):
 
@@ -889,13 +969,16 @@ Responde EXACTAMENTE con este formato (respeta los encabezados):
 ${b.chapter}
 
 ### RESUMEN DETALLADO
-(Mínimo 15–25 líneas. Denso, fiel y ESPECÍFICO: ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Cada idea debe entenderse sin leer el original.)
+(Mínimo 15–25 líneas. Denso, fiel y ESPECÍFICO: ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece. Cada idea debe entenderse sin leer el original.)
 
 ### DEFINICIONES
 - término — definición esencial tal como la da el texto (todas las que aparezcan)
 
 ### NORMAS, REQUISITOS Y PLAZOS
 - (cada artículo/regla/requisito/plazo citado, uno por línea, con su numeración exacta; si no hay, escribe "No se citan en este bloque")
+
+### CITAS TEXTUALES
+- "cita literal" — (p. XX si figura) — relevancia
 
 ### POSTURAS DOCTRINALES Y JURISPRUDENCIA
 - autor o tribunal — tesis/criterio (si no hay, escribe "No se citan en este bloque")
@@ -979,6 +1062,7 @@ $('#btnExportAllPrompts').addEventListener('click',()=>{
   download(safeName()+'_prompts.md',new Blob([all],{type:'text/markdown'}));toast('Prompts exportados');});
 // Modo adjunto + descarga de fragmentos (para fragmentos grandes)
 $('#optArtifact').addEventListener('change',showPrompt);
+$('#promptDepth').addEventListener('change',showPrompt);
 $('#btnDownloadFragment').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
   if(!b)return toast('No hay bloque');downloadFragment(b,false);toast('Fragmento .txt descargado');});
 $('#btnDownloadFragmentMd').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
