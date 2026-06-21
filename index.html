@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Resumidor Jurídico Asistido — Claude &amp; ChatGPT</title>
 <meta name="description" content="Orquestador documental local para resumir documentos jurídicos extensos con Claude o ChatGPT, sin APIs ni nube." />
+<link rel="icon" href="data:," />
 <!--
   Resumidor Jurídico Asistido (RJA)
   =================================
@@ -224,7 +225,7 @@
     <div class="step hidden" data-step="3">
       <div class="panel">
         <h2>4 · Prompts por bloque</h2>
-        <p class="help">Cada bloque contiene un <b>fragmento del documento</b> + instrucciones. El prompt está diseñado para obtener resúmenes <b>específicos</b> (artículos, plazos, requisitos, definiciones y autores), no generales. Si el fragmento es <b>más grande de lo que admite el chat</b>, use <b>Modo adjunto</b>: descarga el texto como archivo, adjúntelo en Claude/ChatGPT y pegue solo el prompt.</p>
+        <p class="help">Cada bloque contiene un <b>fragmento del documento</b> + instrucciones. El prompt está diseñado para obtener respuestas <b>extensas, concretas y específicas</b> (artículos, plazos, requisitos, definiciones y autores), no generales. El modo predeterminado pide usar toda la capacidad útil de salida mediante <b>artefacto/canvas</b>. Si el fragmento es <b>más grande de lo que admite el chat</b>, use <b>Modo adjunto</b>: descarga el texto como archivo, adjúntelo en Claude/ChatGPT y pegue solo el prompt.</p>
         <div class="row">
           <label class="fld" style="margin:0" for="promptBlockSel">Bloque</label>
           <select id="promptBlockSel"></select>
@@ -245,12 +246,12 @@
           <button id="btnDownloadFragment" class="ghost copybtn">⬇ Fragmento .txt</button>
           <button id="btnDownloadFragmentMd" class="ghost copybtn">⬇ Fragmento .md</button>
           <button id="btnExportAllFragments" class="ghost copybtn">⬇ Todos los fragmentos (.zip)</button>
-          <label class="check" title="Pide a Claude/ChatGPT entregar la respuesta como artefacto (Claude) o canvas (ChatGPT): más larga y completa"><input type="checkbox" id="optArtifact" checked> Pedir artefacto/canvas</label>
+          <label class="check" title="Pide a Claude/ChatGPT entregar la respuesta como artefacto (Claude) o canvas (ChatGPT), usando la máxima extensión útil disponible"><input type="checkbox" id="optArtifact" checked> Pedir artefacto/canvas</label>
           <label class="check" title="Nivel de detalle del análisis por bloque">Detalle:
             <select id="promptDepth" style="width:auto;display:inline-block;margin-left:6px">
               <option value="breve">Breve</option>
-              <option value="estandar" selected>Estándar</option>
-              <option value="exhaustivo">Exhaustivo</option>
+              <option value="estandar">Estándar</option>
+              <option value="exhaustivo" selected>Exhaustivo</option>
             </select>
           </label>
         </div>
@@ -528,10 +529,12 @@ async function loadFile(file){
   if(!P.meta.title)P.meta.title=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');
   $('#metaTitle').value=P.meta.title;
   $('#loadInfo').classList.remove('hidden');
-  $('#loadInfo').innerHTML=`<span class="pill done">✓ ${file.name}</span>
-     <span class="muted small">${(file.size/1024).toFixed(0)} KB · ${ext.toUpperCase()}</span>
-     <button class="primary" id="goExtract">Continuar a extracción →</button>`;
-  $('#goExtract').onclick=()=>gotoStep(1);
+  const goExtract=el('button',{class:'primary',onclick:()=>gotoStep(1)},'Continuar a extracción →');
+  $('#loadInfo').replaceChildren(
+    el('span',{class:'pill done'},'✓ ',file.name),
+    el('span',{class:'muted small'},`${(file.size/1024).toFixed(0)} KB · ${ext.toUpperCase()}`),
+    goExtract
+  );
   setProjName(); touch();
   toast('Archivo cargado');
 }
@@ -871,14 +874,19 @@ function approxTokens(s){return Math.ceil((s||'').length/4);}  // estimación gr
 // Nota opcional para pedir la respuesta como artefacto/canvas (más larga y completa).
 function artifactNote(){
   return ($('#optArtifact')&&$('#optArtifact').checked)
-    ? `\n\nFORMATO DE ENTREGA: entrega la respuesta como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown, como documento extenso y completo. No la abrevies ni la recortes para que "quepa" en el chat: prioriza el detalle sobre la brevedad.`
+    ? `\n\nFORMATO DE ENTREGA: entrega la respuesta como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown, como documento jurídico extenso y completo. Usa toda la capacidad útil de salida disponible: desarrolla secciones amplias, tablas si ayudan y listas completas. No la abrevies ni la recortes para que "quepa" en el chat; si el sistema limita la extensión, prioriza terminar el análisis completo del bloque antes que resumirlo en términos generales.`
     : '';
 }
 function blockInstructions(b,depthOverride){
   const m=P.meta;
   const ctx=[m.title&&`Obra: "${m.title}"`,m.author&&`Autor: ${m.author}`,
     m.subject&&`Materia: ${m.subject}`,m.juris&&`Jurisdicción: ${m.juris}`].filter(Boolean).join(' · ');
-  const depth=depthOverride||(($('#promptDepth')&&$('#promptDepth').value)||'estandar');
+  const depth=depthOverride||(($('#promptDepth')&&$('#promptDepth').value)||'exhaustivo');
+  const capacidad={
+    breve:`EXTENSIÓN Y PROFUNDIDAD: aunque esta sea una pasada breve, no sacrifiques datos concretos. Usa el espacio necesario para cubrir todos los artículos, requisitos, definiciones, plazos, autores y excepciones que aparezcan. No impongas un número fijo de líneas.`,
+    estandar:`EXTENSIÓN Y PROFUNDIDAD: usa toda la capacidad útil de salida disponible para que el bloque pueda estudiarse sin volver al original. No te autolimites a un número de líneas: desarrolla tantos párrafos, viñetas, tablas y subapartados como hagan falta para cubrir cada idea concreta del fragmento.`,
+    exhaustivo:`EXTENSIÓN MÁXIMA: usa toda la capacidad útil de salida disponible. Trata este bloque como un informe jurídico autosuficiente: cubre cada norma, requisito, definición, postura, cita, excepción, distinción y matiz presente en el texto. Si el bloque es largo, subdivide por temas y agota el análisis antes de cerrar.`
+  }[depth]||'';
 
   const reglas=`REGLAS DE ESPECIFICIDAD (obligatorias):
 1. Prohibido el lenguaje vago o de relleno ("trata sobre", "aborda diversos aspectos", "entre otros", "en general", "varios"). Si lo usas, reescríbelo con el dato concreto.
@@ -886,14 +894,17 @@ function blockInstructions(b,depthOverride){
 3. Reproduce las definiciones jurídicas con su contenido esencial (no escribas "define la prescripción", escribe la definición).
 4. Si el texto enumera requisitos, elementos, efectos o excepciones, enuméralos TODOS y por separado; nunca como "varios" o "ciertos".
 5. Atribuye cada postura doctrinal a su autor y cada criterio a su tribunal/sentencia.
-6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).`;
+6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).
+7. La respuesta debe ser concreta incluso cuando el bloque sea largo: no sustituyas el contenido por fórmulas como "se examinan diversos requisitos"; escribe cuáles son.`;
 
-  const citasTextuales=`7. CITAS TEXTUALES: cuando el texto incluya una definición, principio o afirmación relevante, transcríbela de forma literal entre comillas, indicando el número de página si aparece en el texto (ej: "La prescripción extingue…" — p. 134).`;
+  const citasTextuales=`8. CITAS TEXTUALES: cuando el texto incluya una definición, principio o afirmación relevante, transcríbela de forma literal entre comillas, indicando el número de página si aparece en el texto (ej: "La prescripción extingue…" — p. 134).`;
 
   if(depth==='breve'){
     return `Eres un jurista experto. Analiza el siguiente bloque de una obra jurídica y entrega un resumen BREVE Y ESPECÍFICO.
 
 ${ctx?`Contexto: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${capacidad}
 
 ${reglas}
 
@@ -903,7 +914,7 @@ Responde con este formato:
 ${b.chapter}
 
 ### SÍNTESIS
-(5–8 líneas, específicas: artículos, plazos, requisitos concretos del bloque)
+(síntesis selectiva, pero concreta: artículos, plazos, requisitos, definiciones y autores exactos del bloque; si hay muchos datos, enuméralos antes que generalizar)
 
 ### CONCEPTOS
 - (uno por línea)
@@ -917,10 +928,12 @@ ${b.chapter}
 
 ${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
 
+${capacidad}
+
 ${reglas}
 ${citasTextuales}
-8. Para cada norma citada, explica su estructura lógica completa: supuesto de hecho → consecuencia jurídica → excepciones.
-9. Para cada concepto, da: (a) definición según el texto, (b) elementos esenciales, (c) distinción de figuras afines si el texto las menciona.
+9. Para cada norma citada, explica su estructura lógica completa: supuesto de hecho → consecuencia jurídica → excepciones.
+10. Para cada concepto, da: (a) definición según el texto, (b) elementos esenciales, (c) distinción de figuras afines si el texto las menciona.
 
 Responde EXACTAMENTE con este formato:
 
@@ -928,7 +941,7 @@ Responde EXACTAMENTE con este formato:
 ${b.chapter}
 
 ### ANÁLISIS EXHAUSTIVO
-(Mínimo 30–40 líneas. Desarrolla cada idea con todos sus elementos, artículos, plazos y matices. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece.)
+(desarrolla cada idea con todos sus elementos, artículos, plazos y matices. Usa la máxima extensión útil disponible; no cierres hasta haber cubierto todas las normas, requisitos, excepciones, definiciones, autores, citas y distinciones presentes en el bloque. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece.)
 
 ### DEFINICIONES Y CONCEPTOS
 - término — definición literal del texto + elementos esenciales + distinción de figuras afines (si las hay)
@@ -946,7 +959,7 @@ ${b.chapter}
 (Cómo el autor construye el argumento en este bloque: premisas → desarrollo → conclusión)
 
 ### PUNTOS CLAVE
-- (8 a 15 viñetas con los argumentos centrales, concretos)
+- (tantas viñetas como sean necesarias para cubrir todos los argumentos centrales, concretos)
 
 ### CONCEPTOS
 - (todos los conceptos jurídicos del bloque, uno por línea)
@@ -955,10 +968,12 @@ ${b.chapter}
 (términos separados por comas, útiles para clasificación)`+artifactNote();
   }
 
-  // estandar (default)
+  // estandar
   return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un resumen ESPECÍFICO Y DETALLADO, NO un resumen general.
 
 ${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${capacidad}
 
 ${reglas}
 ${citasTextuales}
@@ -969,7 +984,7 @@ Responde EXACTAMENTE con este formato (respeta los encabezados):
 ${b.chapter}
 
 ### RESUMEN DETALLADO
-(Mínimo 15–25 líneas. Denso, fiel y ESPECÍFICO: ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece. Cada idea debe entenderse sin leer el original.)
+(denso, fiel y ESPECÍFICO: usa toda la capacidad útil de salida para desarrollar ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece. Cada idea debe entenderse sin leer el original.)
 
 ### DEFINICIONES
 - término — definición esencial tal como la da el texto (todas las que aparezcan)
@@ -984,7 +999,7 @@ ${b.chapter}
 - autor o tribunal — tesis/criterio (si no hay, escribe "No se citan en este bloque")
 
 ### PUNTOS CLAVE
-- (5 a 10 viñetas con los argumentos centrales, concretos)
+- (tantas viñetas como sean necesarias para cubrir los argumentos centrales, concretos)
 
 ### CONCEPTOS
 - (conceptos jurídicos del bloque, uno por línea)
@@ -1120,7 +1135,13 @@ function consolidationPrompt(){
   const partials=P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
   return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final ESPECÍFICO Y DETALLADO, no general.
 
-Reglas: conserva la especificidad de los parciales (artículos, incisos, plazos, requisitos, definiciones, autores y sentencias con su numeración exacta). Prohibido el lenguaje vago ("trata sobre", "diversos aspectos", "varios"). No inventes datos que no estén en los parciales. Si tu interfaz lo permite, entrega el resultado como ARTEFACTO/CANVAS en Markdown (respetando los encabezados de abajo) para no truncar la extensión.
+EXTENSIÓN MÁXIMA DE CONSOLIDACIÓN (obligatoria):
+1. Entrega el dossier final como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown si la interfaz lo permite.
+2. Usa toda la capacidad útil de salida disponible para el producto final completo. No conviertas respuestas parciales largas en un resumen corto.
+3. El RESUMEN MAESTRO debe ser el producto más amplio: desarrolla cada capítulo/bloque con sus normas, artículos, plazos, requisitos, definiciones textuales, posturas doctrinales, citas, excepciones y matices. No comprimas un capítulo en una sola frase si los parciales traen más información.
+4. Si hay límite de extensión, prioriza conservar detalle jurídico concreto antes que ahorrar espacio. Reduce solo repeticiones, no contenido sustantivo. Si aun así no cabe todo, termina con "CONTINUAR PARA COMPLETAR" después del último apartado completo.
+
+Reglas: conserva la especificidad de los parciales (artículos, incisos, plazos, requisitos, definiciones, autores y sentencias con su numeración exacta). Prohibido el lenguaje vago ("trata sobre", "diversos aspectos", "varios"). No inventes datos que no estén en los parciales. Mantén la ficha y la síntesis ejecutiva en su formato pedido, pero usa máxima profundidad en el RESUMEN MAESTRO, el índice, conceptos y palabras clave.
 
 Datos conocidos de la obra:
 - Título: ${m.title||'(desconocido)'}
@@ -1146,7 +1167,7 @@ Devuelve la respuesta EXACTAMENTE con los siguientes encabezados y reglas:
 (EXACTAMENTE 8 líneas, una idea por línea, que permitan recordar toda la obra en menos de un minuto)
 
 ## RESUMEN MAESTRO
-(Resumen integral por capítulos, ESPECÍFICO y extenso: conserva artículos, plazos, requisitos, definiciones textuales, posturas doctrinales con su autor y criterios jurisprudenciales con su tribunal. Cada capítulo debe poder entenderse sin el original. No generalices ni abrevies para "ahorrar espacio".)
+(Resumen integral por capítulos, ESPECÍFICO, extenso y autosuficiente. Usa toda la capacidad útil de salida: para cada capítulo/bloque conserva artículos, plazos, requisitos, definiciones textuales, posturas doctrinales con su autor, criterios jurisprudenciales con su tribunal, citas relevantes, excepciones y distinciones. Cada capítulo debe poder entenderse sin el original. No generalices ni abrevies para "ahorrar espacio".)
 
 ## INDICE TEMATICO
 (Reconstruye el índice por capítulos a partir del resumen maestro. Una línea por entrada: "Capítulo X — Tema")
@@ -1784,7 +1805,10 @@ function loadProject(data){
   $('#metaYear').value=P.meta.year||'';$('#metaPublisher').value=P.meta.publisher||'';
   $('#metaSubject').value=P.meta.subject||'';$('#metaJuris').value=P.meta.juris||'';
   if(P.fileName){$('#loadInfo').classList.remove('hidden');
-    $('#loadInfo').innerHTML=`<span class="pill done">✓ ${P.fileName}</span><span class="muted small">(reabra el archivo si necesita re-extraer)</span>`;}
+    $('#loadInfo').replaceChildren(
+      el('span',{class:'pill done'},'✓ ',P.fileName),
+      el('span',{class:'muted small'},'(reabra el archivo si necesita re-extraer)')
+    );}
   else{$('#loadInfo').classList.add('hidden');}
   if(P.cleanText||P.rawText)showExtractResult();else $('#extractResult').classList.add('hidden');
   if(P.blocks?.length)renderBlocks();else $('#blocksPanel').classList.add('hidden');

@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const script = html.match(/<script>\n"use strict";([\s\S]*?)<\/script>/)[1];
+const scriptMatch = html.match(/<script>\s*"use strict";([\s\S]*?)<\/script>/);
+if (!scriptMatch) throw new Error('No se encontró el script principal de index.html');
+const script = scriptMatch[1];
 
 // --- extraer una función por nombre vía coincidencia de llaves ---
 function grabFn(name){
@@ -33,16 +35,17 @@ const pieces = [
   grabConst(/const CHAP_RE=new RegExp\([\s\S]*?\);/),
   grabConst(/const KNOWN_SECTIONS=\[[\s\S]*?\];/),
   grabConst(/const STOPWORDS_ES=new Set\([\s\S]*?\);/),
+  `const P={meta:{title:'Obra prueba',author:'Autora X',year:'2026',publisher:'Editorial',subject:'Derecho civil',juris:'Chile'},blocks:[{index:1,chapter:'Capítulo I',response:'Art. 2514: definición literal, plazo de cinco años, postura de Alessandri.'}]};`,
   grabFn('stripAccents'), grabFn('headerKey'), grabFn('splitSections'),
   grabFn('listItems'), grabFn('csvItems'), grabFn('dedupe'), grabFn('cleanVal'),
   grabFn('parseFicha'), grabFn('cleanText'), grabFn('detectChapters'),
   grabFn('rebuildIndex'), grabFn('zipStore'),
   grabFn('tokenize'), grabFn('splitPassages'), grabFn('bm25Search'),
   grabFn('groupIntoLotes'), grabFn('buildConceptGraph'), grabFn('graphToSvg'),
-  grabFn('fragmentContent'),
+  grabFn('fragmentContent'), grabFn('consolidationPrompt'),
 ];
 const factory = new Function(pieces.join('\n') +
-  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg,fragmentContent};');
+  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg,fragmentContent,consolidationPrompt};');
 const A = factory();
 
 // --- mini framework ---
@@ -180,6 +183,18 @@ ok(/^<svg/.test(A.graphToSvg(G)) && /prescripci/.test(A.graphToSvg(G)), 'graphTo
 // --- 14. fragmentContent: cabecera txt/md + texto ---
 eq(A.fragmentContent({index:3,chapter:'Cap I',text:'Hola'}, false), 'BLOQUE 3 — Cap I\n\nHola', 'fragmentContent txt');
 eq(A.fragmentContent({index:3,chapter:'Cap I',text:'Hola'}, true), '# Bloque 3 — Cap I\n\nHola', 'fragmentContent md');
+
+// --- 15. prompts: sin topes de líneas y modo exhaustivo por defecto ---
+ok(/<option value="exhaustivo" selected>Exhaustivo<\/option>/.test(html), 'detalle exhaustivo por defecto');
+ok(/usa toda la capacidad útil de salida/i.test(html) && /EXTENSIÓN MÁXIMA/.test(html), 'prompts piden máxima capacidad útil');
+ok(!/(5[–-]8|15[–-]25|30[–-]40|Mínimo \d+)/.test(html), 'prompts sin mínimos/topes fijos de líneas');
+
+// --- 16. consolidación: artefacto/canvas y máxima profundidad final ---
+const CP = A.consolidationPrompt();
+ok(/EXTENSIÓN MÁXIMA DE CONSOLIDACIÓN/.test(CP), 'consolidación tiene regla explícita de máxima extensión');
+ok(/ARTEFACTO \(Claude\) o CANVAS \(ChatGPT\)/.test(CP), 'consolidación pide artefacto/canvas');
+ok(/No conviertas respuestas parciales largas en un resumen corto/.test(CP), 'consolidación evita acortar parciales largos');
+ok(/CONTINUAR PARA COMPLETAR/.test(CP), 'consolidación indica continuación si no cabe todo');
 
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);
