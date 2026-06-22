@@ -694,7 +694,7 @@ async function buildPackageZip(){
   }
   if(P.consolResponse?.trim())e[`${base}_consolidado_bruto.md`]=buildRawConsolidationMarkdown();
   if(P.blocks.some(b=>b.response?.trim()))e[`${base}_fragmentos_resumidos.md`]=buildPartialSummariesMarkdown();
-  if(P.blocks.length)e[`${base}_prompts.md`]=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
+  if(P.blocks.length&&!isSensitive())e[`${base}_prompts.md`]=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
   e[`${base}_proyecto.json`]=JSON.stringify(P,null,2);
   e['README_EXPORTACION.txt']=[
     'Contenido del paquete RJA:',
@@ -765,13 +765,16 @@ function updateSensitiveUI(){
 function parseAllResponses(blob){
   const re=/(?:^|\n)\s*(?:\[\[RJA_BLOCK_ID:b?(\d+)\]\]|==+\s*[Bb]loque\s+(\d+)\b|#{1,6}\s*[Bb]loque\s+(\d+)\b)[^\n]*\n/gi;
   const idx=[];let m;
-  while((m=re.exec(blob))){const n=+(m[1]||m[2]||m[3]);idx.push({n,start:re.lastIndex});}
+  // headerStart = donde comienza la línea de cabecera (incluye el \n previo)
+  // contentStart = donde empieza el contenido de respuesta (después de la cabecera)
+  while((m=re.exec(blob))){const n=+(m[1]||m[2]||m[3]);idx.push({n,headerStart:m.index,contentStart:re.lastIndex});}
   if(!idx.length)return{assigned:0,missing:P.blocks.map(b=>b.index)};
   let assigned=0;
   for(let i=0;i<idx.length;i++){
-    const end=i+1<idx.length?idx[i+1].start:blob.length;
+    // El contenido de este bloque va desde contentStart hasta el headerStart del siguiente
+    const end=i+1<idx.length?idx[i+1].headerStart:blob.length;
     const b=P.blocks.find(x=>x.index===idx[i].n);
-    if(b){b.response=blob.slice(idx[i].start,end).trim();assigned++;}
+    if(b){b.response=blob.slice(idx[i].contentStart,end).trim();assigned++;}
   }
   touch();if(typeof renderResponses==='function')renderResponses();
   return{assigned,missing:P.blocks.filter(b=>!b.response?.trim()).map(b=>b.index)};
@@ -920,7 +923,7 @@ const metaMap={
 function canEnterStep(n){
   if(n===1)return true;
   if(n===2)return true;
-  if(n===3)return!!(P.fileName||P.rawText);
+  if(n===3)return true;
   if(n===4)return!!(P.rawText);
   if(n===5)return!!(P.cleanText||P.rawText);
   if(n===6)return P.blocks.length>0;
@@ -929,6 +932,12 @@ function canEnterStep(n){
   if(n===9)return!!(P.products);
   if(n===10)return!!(P.cleanText||P.rawText);
   return false;
+}
+
+function refreshNav(){
+  document.querySelectorAll('#stepNav button').forEach(b=>{
+    b.disabled=!canEnterStep(+b.dataset.step);
+  });
 }
 
 function gotoStep(n){
@@ -974,14 +983,14 @@ function renderResponses(){
     const statusClass=!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn');
     const div=document.createElement('div');div.className='block-card';
     const senOn=isSensitive();
-    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${b.chapter}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span></div>
+    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span></div>
 <div class="block-actions">
   <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${senOn?'disabled title="Bloqueado: material sensible"':''}>Copiar prompt</button>
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
   ${b.response?.trim()?`<span class="stat-pill" style="background:#d4edda">${v.ok?(v.warn?'⚠ formato':'✓'):'✗ corta'}</span>`:''}
 </div>
-<div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${b.text}</textarea></div>
-<textarea rows="5" placeholder="Pegar respuesta del modelo aquí..." oninput="saveBlockResp(${b.index},this.value)">${b.response||''}</textarea>`;
+<div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${xmlEsc(b.text)}</textarea></div>
+<textarea rows="5" placeholder="Pegar respuesta del modelo aquí..." oninput="saveBlockResp(${b.index},this.value)">${xmlEsc(b.response||'')}</textarea>`;
     c.appendChild(div);
   }
 }
@@ -1075,14 +1084,14 @@ document.addEventListener('DOMContentLoaded',()=>{
       document.getElementById('rawTextArea').value=text;
       updateRawStats();
       prog.textContent=`Extraídos ${text.length.toLocaleString('es')} caracteres.`;
-      toast('Texto extraído.');
+      refreshNav();toast('Texto extraído.');
     }catch(err){
       prog.textContent='Error: '+err.message;toast('Error de extracción: '+err.message,5000);
     }
   });
   document.getElementById('btnUseRawText')?.addEventListener('click',()=>{
     const val=document.getElementById('rawTextArea')?.value||'';
-    P.rawText=val;touch();updateRawStats();toast('rawText actualizado desde el área.');
+    P.rawText=val;touch();updateRawStats();refreshNav();toast('rawText actualizado desde el área.');
   });
 
   // Step 4
@@ -1146,7 +1155,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnBuildProducts')?.addEventListener('click',()=>{
     if(!P.consolResponse?.trim())return toast('No hay consolidación guardada.');
     P.products=parseConsolidation(P.consolResponse);touch();
-    renderProducts();toast('Productos construidos.');
+    renderProducts();refreshNav();toast('Productos construidos.');
   });
 
   // Step 9
@@ -1262,6 +1271,7 @@ if(typeof window==='undefined'){
     parseAllResponses,validateResponse,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,
+    canEnterStep,refreshNav,
   });
 }
 </script>

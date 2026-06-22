@@ -668,5 +668,72 @@ proceso, prueba, acción, pretensión`;
   assert(pr.keywords.length >= 3, `keywords≥3 (${pr.keywords.length})`);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-53  parseAllResponses no contamina bloques con cabecera del siguiente
+// ════════════════════════════════════════════════════════════════════════════
+test('T-53 parseAllResponses — cabecera del bloque siguiente no aparece en respuesta anterior', () => {
+  // Mutate blocks on the shared P object (no replacement — avoids eval-scope divergence)
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'Cap A', text: 'texto A', response: '' },
+    { index: 2, chapter: 'Cap B', text: 'texto B', response: '' },
+  ];
+  const blob = '== Bloque 1 ==\nRespuesta del bloque uno.\n\n== Bloque 2 ==\nRespuesta del bloque dos.';
+  parseAllResponses(blob);
+  const r1 = globalThis.P.blocks[0].response;
+  const r2 = globalThis.P.blocks[1].response;
+  notIncludes(r1, 'Bloque 2', 'cabecera bloque 2 no debe estar en respuesta 1');
+  includes(r1, 'Respuesta del bloque uno', 'respuesta 1 correcta');
+  includes(r2, 'Respuesta del bloque dos', 'respuesta 2 correcta');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-54  canEnterStep(3) siempre retorna true
+// ════════════════════════════════════════════════════════════════════════════
+test('T-54 canEnterStep(3) siempre true sin archivo ni rawText', () => {
+  // canEnterStep(3) now always returns true — no state needed
+  const { canEnterStep } = globalThis;
+  assert(canEnterStep(3), 'step 3 debe ser accesible sin archivo cargado');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-55  buildPackageZip excluye _prompts.md en modo sensible
+// ════════════════════════════════════════════════════════════════════════════
+test('T-55 buildPackageZip omite _prompts.md cuando isSensitive()', async () => {
+  // isSensitive() reads P.sensitive — mutate P directly (no replacement).
+  // blockInstructions starts with "Eres un asistente" — unique to prompts file.
+  globalThis.P.blocks = [{ index: 1, chapter: 'Cap', text: 'texto', response: 'resp' }];
+  globalThis.P.sensitive = true;
+  const blob = await globalThis.buildPackageZip();
+  const arr = await blobBytes(blob);
+  const text = new TextDecoder().decode(arr);
+  notIncludes(text, 'Eres un asistente', 'blockInstructions no debe aparecer en modo sensible');
+  globalThis.P.sensitive = false;
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-56  buildPackageZip incluye _prompts.md cuando no es sensible
+// ════════════════════════════════════════════════════════════════════════════
+test('T-56 buildPackageZip incluye _prompts.md cuando no es sensible', async () => {
+  // blockInstructions text appears only in _prompts.md file, not in dossier or README.
+  globalThis.P.blocks = [{ index: 1, chapter: 'Cap', text: 'texto', response: 'resp' }];
+  globalThis.P.sensitive = false;
+  const blob = await globalThis.buildPackageZip();
+  const arr = await blobBytes(blob);
+  const text = new TextDecoder().decode(arr);
+  includes(text, 'Eres un asistente', 'blockInstructions debe aparecer en zip cuando no es sensible');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-57  xmlEsc escapa caracteres HTML en contenido de usuario
+// ════════════════════════════════════════════════════════════════════════════
+test('T-57 xmlEsc escapa < > & " en texto de bloque', () => {
+  const raw = '<script>alert("xss")</script>&';
+  const escaped = xmlEsc(raw);
+  notIncludes(escaped, '<script>', 'no debe contener <script> sin escapar');
+  includes(escaped, '&lt;', 'debe escapar <');
+  includes(escaped, '&gt;', 'debe escapar >');
+  includes(escaped, '&amp;', 'debe escapar &');
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();
