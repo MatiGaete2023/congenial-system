@@ -101,14 +101,21 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     <button id="btnVendorInfo" class="secondary">Info librerías offline</button>
   </div>
   <div id="vendorInfoPanel" style="display:none" class="info-box">
-    <strong>Librerías requeridas para extracción PDF/DOCX/OCR (cargar en la página antes de usar):</strong><br>
+    <strong>Librerías para extracción PDF/DOCX/OCR (opcionales):</strong><br>
     <ul style="margin:6px 0 0 16px;font-size:.8rem">
       <li>PDF.js — extracción de texto PDF</li>
       <li>Mammoth.js — extracción de texto DOCX</li>
       <li>Tesseract.js — OCR en imágenes (experimental, offline parcial)</li>
-      <li>Transformers.js / Whisper-tiny — audio (experimental, offline parcial)</li>
     </ul>
-    <p style="margin-top:6px;font-size:.78rem;color:#666">El resto de la herramienta funciona 100% sin estas librerías.</p>
+    <p style="margin-top:6px;font-size:.78rem;color:#666">
+      Por defecto <strong>no se descarga nada</strong> (ejecución 100% local). Para extraer PDF/DOCX/imágenes
+      puede cargarlas bajo demanda desde CDN (requiere internet solo en ese momento) o colocar los archivos
+      <code>pdf.min.js</code>, <code>pdf.worker.min.js</code>, <code>mammoth.browser.min.js</code>,
+      <code>tesseract.min.js</code> junto a este HTML.
+    </p>
+    <button id="btnLoadVendor" class="secondary" style="margin-top:6px">Cargar librerías desde CDN (requiere internet)</button>
+    <div id="vendorStatus" style="margin-top:6px;font-size:.8rem;color:#555"></div>
+    <p style="margin-top:6px;font-size:.78rem;color:#666">TXT, MD y pegar texto directamente funcionan sin ninguna librería.</p>
   </div>
 </section>
 <!-- STEP 2 -->
@@ -301,6 +308,29 @@ let P=blankProject();
 let current=1;
 
 function touch(){P._modified=Date.now();}
+
+// Normaliza un proyecto cargado (.json) contra la forma de blankProject():
+// evita fallos cuando el archivo es antiguo, parcial o editado a mano.
+function normalizeProject(obj){
+  const base=blankProject();
+  if(!obj||typeof obj!=='object')return base;
+  base.fileName=typeof obj.fileName==='string'?obj.fileName:'';
+  base.rawText=typeof obj.rawText==='string'?obj.rawText:'';
+  base.cleanText=typeof obj.cleanText==='string'?obj.cleanText:'';
+  base.consolResponse=typeof obj.consolResponse==='string'?obj.consolResponse:'';
+  base.sensitive=!!obj.sensitive;
+  base._modified=typeof obj._modified==='number'?obj._modified:Date.now();
+  if(obj.meta&&typeof obj.meta==='object')for(const k of Object.keys(base.meta))if(typeof obj.meta[k]==='string')base.meta[k]=obj.meta[k];
+  if(Array.isArray(obj.blocks))base.blocks=obj.blocks.map((b,i)=>({
+    index:Number.isFinite(b&&b.index)?b.index:i+1,
+    chapter:(b&&typeof b.chapter==='string')?b.chapter:`Bloque ${i+1}`,
+    text:(b&&typeof b.text==='string')?b.text:'',
+    response:(b&&typeof b.response==='string')?b.response:'',
+    excluded:!!(b&&b.excluded),
+  }));
+  base.products=(obj.products&&typeof obj.products==='object')?obj.products:null;
+  return base;
+}
 
 // ============================================================
 // UTILITIES
@@ -884,8 +914,11 @@ function parseConsolidation(text){
     const r=text.match(pat);if(!r)return[];
     return r[1].split('\n').map(l=>l.replace(/^[-•*\d.)\s]+/,'').trim()).filter(Boolean);
   };
+  // El límite de cada sección es el SIGUIENTE encabezado CONOCIDO, no cualquier `##`,
+  // para no truncar el RESUMEN MAESTRO en sus propios subtítulos `##`/`###` internos.
+  const NEXT='(?=\\n##\\s*(?:FICHA|S[IÍ]NTESIS|[ÍI]NDICE|RESUMEN\\s+MAESTRO|CONCEPTOS|PALABRAS|ANEXO|BIBLIOGRAF)|$)';
   const section=(name)=>{
-    const re=new RegExp(`##\\s*${name}[\\s\\S]*?\\n([\\s\\S]+?)(?=\\n##|$)`,'i');
+    const re=new RegExp(`##\\s*${name}[^\\n]*\\n([\\s\\S]*?)${NEXT}`,'i');
     const r=text.match(re);return r?r[1].trim():'';
   };
   const synthBlock=section('S[IÍ]NTESIS EJECUTIVA');
@@ -913,11 +946,50 @@ function parseConsolidation(text){
 }
 
 // ============================================================
-// DOCUMENT EXTRACTION (stubs — require vendor libs)
+// DOCUMENT EXTRACTION (requieren librerías de terceros, opt-in)
 // ============================================================
+// CDN por defecto + rutas locales como respaldo. Nada se carga hasta que
+// el usuario pulsa "Cargar librerías" (no hay red automática).
+const VENDOR={
+  pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  pdfWorker:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+  pdfWorkerLocal:'pdf.worker.min.js',
+};
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=src;s.async=true;
+    s.onload=()=>res();
+    s.onerror=()=>rej(new Error('No se pudo cargar '+src));
+    document.head.appendChild(s);
+  });
+}
+async function loadVendorLibs(){
+  const status=document.getElementById('vendorStatus');
+  const set=t=>{if(status)status.textContent=t;};
+  try{
+    if(typeof pdfjsLib==='undefined'){set('Cargando PDF.js…');await loadScript(VENDOR.pdf);}
+    if(typeof pdfjsLib!=='undefined'&&!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=VENDOR.pdfWorker;
+    if(typeof mammoth==='undefined'){set('Cargando Mammoth.js…');await loadScript(VENDOR.mammoth);}
+    if(typeof Tesseract==='undefined'){set('Cargando Tesseract.js…');await loadScript(VENDOR.tesseract);}
+    set('✓ Librerías cargadas. Ya puede extraer PDF, DOCX e imágenes.');
+    toast('Librerías de extracción cargadas.');
+  }catch(err){
+    set('✗ '+err.message+'. Verifique su conexión o coloque los archivos junto al HTML.');
+    toast('Error cargando librerías: '+err.message,5000);
+  }
+}
+// Configura el worker de PDF.js sin pisar uno ya definido (CDN o local).
+function ensurePdfWorker(){
+  if(typeof pdfjsLib!=='undefined'&&!pdfjsLib.GlobalWorkerOptions.workerSrc)
+    pdfjsLib.GlobalWorkerOptions.workerSrc=VENDOR.pdfWorker||VENDOR.pdfWorkerLocal;
+}
+
 async function extractPdf(file){
-  if(typeof pdfjsLib==='undefined')throw new Error('PDF.js no cargado. Cargue las librerías offline primero.');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='pdf.worker.min.js';
+  if(typeof pdfjsLib==='undefined')throw new Error('PDF.js no cargado. Pulse "Info librerías" → "Cargar librerías" primero.');
+  ensurePdfWorker();
   const ab=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:ab}).promise;
   const out=[];
@@ -933,7 +1005,7 @@ async function ocrPdf(file){
   if(typeof Tesseract==='undefined')throw new Error('Tesseract.js no cargado.');
   const ab=await file.arrayBuffer();
   if(typeof pdfjsLib==='undefined')throw new Error('PDF.js requerido para OCR de PDF.');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='pdf.worker.min.js';
+  ensurePdfWorker();
   const pdf=await pdfjsLib.getDocument({data:ab}).promise;
   const out=[];
   for(let i=1;i<=pdf.numPages;i++){
@@ -1073,9 +1145,9 @@ function renderProducts(){
   const el=document.getElementById('productsPreview');if(!el)return;
   if(!P.products){el.innerHTML='<p class="warn-box">Sin productos. Guarde la consolidación primero.</p>';return;}
   const pr=P.products;
-  el.innerHTML=`<div class="info-box"><strong>${pr.ficha.title||'(sin título)'}</strong><br>
-Síntesis: ${pr.synthLines.length} puntos · Índice: ${pr.indexItems.length} temas · Conceptos: ${pr.concepts.length}<br>
-Resumen maestro: ${pr.master.length.toLocaleString('es')} chars</div>`;
+  el.innerHTML=`<div class="info-box"><strong>${xmlEsc((pr.ficha&&pr.ficha.title)||'(sin título)')}</strong><br>
+Síntesis: ${(pr.synthLines||[]).length} puntos · Índice: ${(pr.indexItems||[]).length} temas · Conceptos: ${(pr.concepts||[]).length}<br>
+Resumen maestro: ${(pr.master||'').length.toLocaleString('es')} chars</div>`;
 }
 
 function copyBlockPrompt(idx){
@@ -1116,19 +1188,26 @@ document.addEventListener('DOMContentLoaded',()=>{
     P=blankProject();touch();
     document.getElementById('fileInfo').innerHTML='';
     document.getElementById('fileInput').value='';
+    ['rawTextArea','cleanTextArea','consolResponseArea','bulkResp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    loadMetaForm();updateSensitiveUI();
     gotoStep(1);toast('Proyecto nuevo.');
   });
   document.getElementById('btnLoadProject')?.addEventListener('click',()=>document.getElementById('projectFileInput').click());
   document.getElementById('projectFileInput')?.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     try{
-      const text=await file.text();P=JSON.parse(text);touch();
-      toast('Proyecto cargado.');gotoStep(canEnterStep(9)?9:canEnterStep(6)?6:1);
+      const text=await file.text();P=normalizeProject(JSON.parse(text));touch();
+      updateSensitiveUI();loadMetaForm();
+      toast('Proyecto cargado.');gotoStep(canEnterStep(9)?9:canEnterStep(6)?6:canEnterStep(3)?3:1);
     }catch(err){toast('Error al cargar proyecto: '+err.message);}
   });
   document.getElementById('btnVendorInfo')?.addEventListener('click',()=>{
     const p=document.getElementById('vendorInfoPanel');
     p.style.display=p.style.display==='none'?'block':'none';
+  });
+  document.getElementById('btnLoadVendor')?.addEventListener('click',e=>{
+    e.target.disabled=true;
+    loadVendorLibs().finally(()=>{e.target.disabled=false;});
   });
 
   // Step 2
@@ -1352,7 +1431,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 // ============================================================
 if(typeof window==='undefined'){
   Object.assign(globalThis,{
-    P,blankProject,touch,safeName,xmlEsc,
+    P,blankProject,normalizeProject,touch,safeName,xmlEsc,
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,

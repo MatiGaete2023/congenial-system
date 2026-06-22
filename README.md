@@ -104,7 +104,16 @@ Para extracción de texto la herramienta utiliza (opcionales, no incluidas):
 | Tesseract.js | OCR en imágenes y PDF escaneado | Experimental — offline parcial |
 | Transformers.js + Whisper-tiny | Transcripción de audio | Experimental — offline parcial |
 
-Cargue estas librerías desde CDN o desde archivos locales antes de usar extracción PDF/DOCX/OCR.
+Por defecto **no se descarga nada** (ejecución 100 % local). Para habilitar la extracción
+de PDF/DOCX/imágenes tiene dos opciones, ambas opt-in:
+
+1. **Bajo demanda desde CDN**: en el paso 1 → *Info librerías* → botón
+   **«Cargar librerías desde CDN»** (requiere internet solo en ese momento).
+2. **Totalmente local**: coloque `pdf.min.js`, `pdf.worker.min.js`,
+   `mammoth.browser.min.js` y `tesseract.min.js` junto al `index.html` y cárguelos
+   en la página antes de extraer.
+
+TXT, MD y el pegado directo de texto funcionan sin ninguna librería.
 
 ---
 
@@ -120,7 +129,7 @@ Cargue estas librerías desde CDN o desde archivos locales antes de usar extracc
 ## Desarrollo y tests
 
 ```bash
-npm test   # → 64 OK / 0 fallidas
+npm test   # → 67 OK / 0 fallidas
 ```
 
 Los tests cubren: ZIP (CRC32, MIME, binario), DOCX (estilos, TOC, Markdown→Word),
@@ -128,7 +137,8 @@ limpieza de texto, detección de capítulos (decimal, romano, TODO-MAYÚSCULAS),
 segmentación, pegado masivo, validación heurística de respuestas, modo sensible,
 exportaciones, navegación de pasos, XSS-escape de contenido de usuario,
 guard de prompts en modo sensible, consolidación por lotes, paquete local sin productos,
-y editor de estructura de bloques (excluir/renombrar).
+editor de estructura de bloques (excluir/renombrar), preservación de subtítulos internos
+del resumen maestro y carga robusta de proyectos `.json` parciales o corruptos.
 
 ---
 

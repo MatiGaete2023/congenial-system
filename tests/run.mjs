@@ -49,6 +49,7 @@ const {
   parseAllResponses, validateResponse,
   parseConsolidation, reassembleParts, bm25Search,
   CONSOL_BATCH_THRESHOLD, buildBatchConsolPrompts,
+  normalizeProject,
 } = globalThis;
 
 // ── Test harness ────────────────────────────────────────────────────────────
@@ -826,6 +827,67 @@ test('T-64 updateBlockChapter renombra capítulo correctamente', () => {
   ];
   updateBlockChapter(1, 'ANTECEDENTES DE HECHO');
   assert(globalThis.P.blocks[0].chapter === 'ANTECEDENTES DE HECHO', 'el capítulo debe haberse renombrado');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-65  parseConsolidation NO trunca el RESUMEN MAESTRO en sus ## internos
+// ════════════════════════════════════════════════════════════════════════════
+test('T-65 parseConsolidation preserva subtítulos ## internos del maestro', () => {
+  const raw = [
+    '## FICHA BIBLIOGRÁFICA',
+    '- Título: X',
+    '',
+    '## SÍNTESIS EJECUTIVA',
+    '1. uno',
+    '',
+    '## ÍNDICE TEMÁTICO',
+    '- t',
+    '',
+    '## RESUMEN MAESTRO',
+    '## Capítulo I — Personas',
+    'Texto uno.',
+    '### Subsección',
+    'Detalle.',
+    '## Capítulo II — Bienes',
+    'Texto dos.',
+    '',
+    '## CONCEPTOS CLAVE',
+    '- c',
+    '',
+    '## PALABRAS CLAVE',
+    'a, b',
+  ].join('\n');
+  const pr = parseConsolidation(raw);
+  includes(pr.master, 'Capítulo I', 'maestro debe incluir Capítulo I');
+  includes(pr.master, 'Subsección', 'maestro debe incluir la subsección interna');
+  includes(pr.master, 'Capítulo II', 'maestro NO debe truncarse en el primer ## interno');
+  notIncludes(pr.master, 'CONCEPTOS CLAVE', 'maestro debe detenerse en la siguiente sección conocida');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-66  normalizeProject rellena defaults desde JSON parcial/corrupto
+// ════════════════════════════════════════════════════════════════════════════
+test('T-66 normalizeProject tolera JSON parcial/corrupto', () => {
+  const np = normalizeProject({ blocks: 'no-es-array', meta: null, products: 42, sensitive: true });
+  assert(Array.isArray(np.blocks), 'blocks debe ser array aunque venga corrupto');
+  assert(np.products === null, 'products inválido debe quedar null');
+  eq(Object.keys(np.meta).length, 9, 'meta debe tener las 9 claves');
+  assert(np.sensitive === true, 'sensitive debe preservarse');
+  // null/undefined → proyecto en blanco válido
+  const blank = normalizeProject(null);
+  assert(Array.isArray(blank.blocks) && blank.blocks.length === 0, 'null → proyecto en blanco');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-67  normalizeProject completa bloques parciales (index/excluded)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-67 normalizeProject completa campos faltantes de bloques', () => {
+  const np = normalizeProject({ blocks: [{ chapter: 'Solo capítulo' }, { text: 'solo texto' }] });
+  eq(np.blocks[0].index, 1, 'index se autogenera (1)');
+  eq(np.blocks[1].index, 2, 'index se autogenera (2)');
+  assert(np.blocks[0].excluded === false, 'excluded por defecto false');
+  assert(typeof np.blocks[1].response === 'string', 'response por defecto string');
+  assert(typeof np.blocks[0].text === 'string', 'text por defecto string');
 });
 
 // ── Run ─────────────────────────────────────────────────────────────────────
