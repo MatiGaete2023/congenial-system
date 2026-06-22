@@ -11,6 +11,10 @@ header{background:#1a3a5c;color:#fff;padding:12px 20px;display:flex;align-items:
 header h1{font-size:1.2rem;font-weight:700}header h1 span{font-size:.8rem;opacity:.7;margin-left:6px}
 header p{font-size:.85rem;opacity:.8;flex:1}
 .sensitive-toggle{display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer}
+header.sensitive-on{background:#8b1a2a;}
+header.sensitive-on .sensitive-toggle{font-weight:700;letter-spacing:.03em;}
+#sensitiveBanner{background:#c0392b;color:#fff;text-align:center;padding:5px 12px;font-size:.8rem;display:none;}
+body.sensitive-on #sensitiveBanner{display:block;}
 nav{background:#234;display:flex;flex-wrap:wrap;gap:2px;padding:4px 8px}
 nav button{background:none;border:none;color:#acd;padding:6px 12px;cursor:pointer;border-radius:4px;font-size:.8rem;transition:background .15s}
 nav button:hover{background:#345}
@@ -75,6 +79,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   <button data-step="9">9 Exportar</button>
   <button data-step="10">⚙ Local</button>
 </nav>
+<div id="sensitiveBanner">🔒 Modo Material Sensible activo — copiar texto a IA externa está bloqueado. Solo herramientas locales disponibles.</div>
 <main>
 <!-- STEP 1 -->
 <section id="step1" class="step active">
@@ -183,7 +188,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 <section id="step7" class="step">
   <h2>7. Consolidar</h2>
   <div class="card">
-    <button id="btnCopyConsol">Copiar prompt de consolidación</button>
+    <button id="btnCopyConsol" data-ia-guard>Copiar prompt de consolidación</button>
     <p class="info-box" style="margin-top:8px">Copie el prompt, péguelo en Claude/ChatGPT, obtenga la respuesta y péguela abajo.</p>
     <textarea id="consolResponseArea" rows="12" placeholder="Pega aquí la respuesta de consolidación del modelo"></textarea>
     <button id="btnSaveConsol">Guardar consolidación</button>
@@ -227,7 +232,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
       <p>Respaldo reanudable del proyecto</p>
     </div>
     <div class="export-btn-wrap">
-      <button id="btnExportPrompts" style="width:100%">Prompts .md</button>
+      <button id="btnExportPrompts" style="width:100%" data-ia-guard>Prompts .md</button>
       <p>Todos los prompts usados</p>
     </div>
   </div>
@@ -242,7 +247,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     <button id="btnManualFicha">Ficha bibliográfica .md</button>
     <button id="btnExportCleanTxt">Texto limpio .txt</button>
     <button id="btnExportSource">Segmentar y exportar fuente .zip</button>
-    <button id="btnExportAllPrompts">Exportar prompts .md</button>
+    <button id="btnExportAllPrompts" data-ia-guard>Exportar prompts .md</button>
   </div>
   <div class="card">
     <h3>Búsqueda local BM25</h3>
@@ -738,6 +743,22 @@ function sensitiveGuardIA(){
 }
 function sensitiveAllowLocal(){return true;}
 
+function updateSensitiveUI(){
+  const on=isSensitive();
+  // Visual: header + banner
+  document.querySelector('header')?.classList?.toggle('sensitive-on',on);
+  document.body?.classList?.toggle('sensitive-on',on);
+  const chk=document.getElementById('chkSensitive');
+  if(chk)chk.checked=on;
+  // Disable all IA-guard buttons
+  document.querySelectorAll('[data-ia-guard]').forEach(b=>{
+    b.disabled=on;
+    b.title=on?'Bloqueado: modo material sensible activo':'';
+  });
+  // Re-render block cards so los botones "Copiar prompt" reflejan el estado
+  if(current===6)renderResponses();
+}
+
 // ============================================================
 // §3.6 Pegado masivo + validación heurística
 // ============================================================
@@ -952,9 +973,10 @@ function renderResponses(){
     const v=validateResponse(b);
     const statusClass=!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn');
     const div=document.createElement('div');div.className='block-card';
+    const senOn=isSensitive();
     div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${b.chapter}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span></div>
 <div class="block-actions">
-  <button onclick="copyBlockPrompt(${b.index})">Copiar prompt</button>
+  <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${senOn?'disabled title="Bloqueado: material sensible"':''}>Copiar prompt</button>
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
   ${b.response?.trim()?`<span class="stat-pill" style="background:#d4edda">${v.ok?(v.warn?'⚠ formato':'✓'):'✗ corta'}</span>`:''}
 </div>
@@ -1209,8 +1231,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Sensitive mode toggle
   document.getElementById('chkSensitive')?.addEventListener('change',e=>{
     P.sensitive=e.target.checked;touch();
+    updateSensitiveUI();
     toast(P.sensitive?'Material sensible ON: prompts/RAG/consolidación a IA bloqueados':'Material sensible OFF');
-    if(typeof current==='number')gotoStep(current);
   });
 
   // Sync meta form on input
@@ -1219,6 +1241,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
 
   gotoStep(1);
+  updateSensitiveUI();
 });
 
 // ============================================================
@@ -1235,7 +1258,7 @@ if(typeof window==='undefined'){
     buildMarkdown,buildObsidian,
     buildPartialSummariesMarkdown,buildRawConsolidationMarkdown,buildPackageZip,
     buildOfflineMarkdown,buildManualFichaMarkdown,
-    isSensitive,sensitiveGuardIA,sensitiveAllowLocal,
+    isSensitive,sensitiveGuardIA,sensitiveAllowLocal,updateSensitiveUI,
     parseAllResponses,validateResponse,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,

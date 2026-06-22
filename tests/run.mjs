@@ -585,5 +585,88 @@ test('T-47 reassembleParts une partes', () => {
   includes(result, 'Segunda parte', 'segunda parte presente');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-48  sensitiveGuardIA → false cuando P.sensitive=true              [REQ-F]
+// ════════════════════════════════════════════════════════════════════════════
+test('T-48 sensitiveGuardIA → false cuando sensitive=true', () => {
+  globalThis.P.sensitive = true;
+  eq(sensitiveGuardIA(), false, 'debe bloquear cuando sensitive=true');
+  globalThis.P.sensitive = false;
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-49  sensitiveAllowLocal → true siempre                            [REQ-F]
+// ════════════════════════════════════════════════════════════════════════════
+test('T-49 sensitiveAllowLocal → true siempre', () => {
+  globalThis.P.sensitive = true;
+  eq(sensitiveAllowLocal(), true, 'local siempre permitido con sensitive=true');
+  globalThis.P.sensitive = false;
+  eq(sensitiveAllowLocal(), true, 'local siempre permitido con sensitive=false');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-50  buildManualFichaMarkdown incluye edition, pages, subsubjects   [C-03]
+// ════════════════════════════════════════════════════════════════════════════
+test('T-50 buildManualFichaMarkdown incluye edition/pages/subsubjects', () => {
+  globalThis.P.meta = {
+    title: 'Código Civil', author: 'Test', year: '2024',
+    publisher: 'Ed. Test', edition: '5.ª ed.', pages: '650',
+    subject: 'Civil', subsubjects: 'Obligaciones, Contratos', juris: 'Argentina',
+  };
+  globalThis.P.cleanText = 'Texto de prueba.';
+  const md = buildManualFichaMarkdown();
+  includes(md, '5.ª ed.', 'edición incluida');
+  includes(md, '650', 'páginas incluidas');
+  includes(md, 'Obligaciones, Contratos', 'submaterias incluidas');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-51  blockPrompt sin marcador estricto → no contiene [[RJA_BLOCK_ID]] [R-4]
+// ════════════════════════════════════════════════════════════════════════════
+test('T-51 blockPrompt sin validación estricta → sin [[RJA_BLOCK_ID]]', () => {
+  // optStrictValidation.checked = false (default en mock)
+  const b = { index: 1, chapter: 'Cap 1', text: 'Texto del fragmento.', response: '' };
+  const prompt = blockPrompt(b);
+  notIncludes(prompt, '[[RJA_BLOCK_ID', 'sin marcador cuando strict OFF (R-4)');
+  includes(prompt, blockInstructions.slice(0, 30), 'incluye blockInstructions');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-52  parseConsolidation extrae ficha + secciones                   [REQ-D]
+// ════════════════════════════════════════════════════════════════════════════
+test('T-52 parseConsolidation extrae estructura de consolidación', () => {
+  globalThis.P.meta = { title: '', author: '', year: '', publisher: '', edition: '', pages: '', subject: '', subsubjects: '' };
+  const raw = `## FICHA BIBLIOGRÁFICA
+- Título: Derecho Procesal Civil
+- Autor: Juan Pérez
+- Año: 2020
+
+## SÍNTESIS EJECUTIVA
+1. Punto importante uno
+2. Punto importante dos
+
+## ÍNDICE TEMÁTICO
+- Proceso civil
+- Prueba
+
+## RESUMEN MAESTRO
+### Capítulo I
+Contenido del capítulo uno.
+
+## CONCEPTOS CLAVE
+- Acción procesal
+- Pretensión
+
+## PALABRAS CLAVE
+proceso, prueba, acción, pretensión`;
+  const pr = parseConsolidation(raw);
+  assert(pr.ficha, 'tiene ficha');
+  assert(pr.synthLines.length >= 2, `synthLines≥2 (${pr.synthLines.length})`);
+  assert(pr.indexItems.length >= 2, `indexItems≥2 (${pr.indexItems.length})`);
+  assert(pr.master.length > 0, 'master no vacío');
+  assert(pr.concepts.length >= 2, `concepts≥2 (${pr.concepts.length})`);
+  assert(pr.keywords.length >= 3, `keywords≥3 (${pr.keywords.length})`);
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();
