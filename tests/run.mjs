@@ -48,6 +48,7 @@ const {
   isSensitive, sensitiveGuardIA, sensitiveAllowLocal,
   parseAllResponses, validateResponse,
   parseConsolidation, reassembleParts, bm25Search,
+  CONSOL_BATCH_THRESHOLD, buildBatchConsolPrompts,
 } = globalThis;
 
 // ── Test harness ────────────────────────────────────────────────────────────
@@ -733,6 +734,60 @@ test('T-57 xmlEsc escapa < > & " en texto de bloque', () => {
   includes(escaped, '&lt;', 'debe escapar <');
   includes(escaped, '&gt;', 'debe escapar >');
   includes(escaped, '&amp;', 'debe escapar &');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-58  detectChapters detecta encabezados TODO-MAYÚSCULAS (REQ-P)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-58 detectChapters detecta encabezados TODO-MAYÚSCULAS', () => {
+  const text = 'ANTECEDENTES DE HECHO\nTexto del antecedente.\n\nFUNDAMENTOS DE DERECHO\nEl derecho aplicable.';
+  const chapters = detectChapters(text);
+  const titles = chapters.map(c => c.title);
+  assert(titles.some(t => t.includes('ANTECEDENTES')), 'debe detectar ANTECEDENTES DE HECHO');
+  assert(titles.some(t => t.includes('FUNDAMENTOS')), 'debe detectar FUNDAMENTOS DE DERECHO');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-59  buildBatchConsolPrompts divide bloques cuando chars > threshold (REQ-O)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-59 buildBatchConsolPrompts divide cuando total > CONSOL_BATCH_THRESHOLD', () => {
+  // Two blocks with responses just above half the threshold each
+  const half = Math.ceil(CONSOL_BATCH_THRESHOLD / 2) + 1;
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'A', text: 'ta', response: 'R'.repeat(half) },
+    { index: 2, chapter: 'B', text: 'tb', response: 'R'.repeat(half) },
+  ];
+  const batches = buildBatchConsolPrompts();
+  assert(batches.length >= 2, 'debe producir al menos 2 lotes cuando supera el umbral');
+  includes(batches[0], 'lote 1/', 'primer lote debe indicar su número');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-60  buildBatchConsolPrompts no divide cuando chars <= threshold
+// ════════════════════════════════════════════════════════════════════════════
+test('T-60 buildBatchConsolPrompts no divide cuando total <= CONSOL_BATCH_THRESHOLD', () => {
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'A', text: 'ta', response: 'respuesta corta' },
+    { index: 2, chapter: 'B', text: 'tb', response: 'otra respuesta corta' },
+  ];
+  const batches = buildBatchConsolPrompts();
+  assert(batches.length === 1, 'debe producir 1 lote cuando el total no supera el umbral');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-61  buildPackageZip funciona sin P.products (solo rawText — REQ-G paquete local)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-61 buildPackageZip funciona sin P.products solo con rawText', async () => {
+  globalThis.P.products = null;
+  globalThis.P.consolResponse = '';
+  globalThis.P.blocks = [];
+  globalThis.P.rawText = 'Texto de prueba sin consolidar';
+  globalThis.P.sensitive = false;
+  const blob = await globalThis.buildPackageZip();
+  assert(blob instanceof Blob, 'debe devolver un Blob');
+  const arr = await blobBytes(blob);
+  const text = new TextDecoder().decode(arr);
+  includes(text, 'README_EXPORTACION', 'el paquete debe incluir el README aunque no haya productos');
 });
 
 // ── Run ─────────────────────────────────────────────────────────────────────

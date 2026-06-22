@@ -193,6 +193,10 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     <textarea id="consolResponseArea" rows="12" placeholder="Pega aquí la respuesta de consolidación del modelo"></textarea>
     <button id="btnSaveConsol">Guardar consolidación</button>
     <button id="btnReassemble" class="secondary">Reensamblar partes ("CONTINUAR PARA COMPLETAR")</button>
+    <div id="batchWrap" style="display:none;margin-top:10px">
+      <p class="warn-box">Texto extenso: se recomienda consolidar en lotes. <span id="batchInfo"></span></p>
+      <button id="btnCopyBatchConsol" data-ia-guard class="secondary">Exportar lotes de consolidación (.md)</button>
+    </div>
   </div>
 </section>
 <!-- STEP 8 -->
@@ -248,6 +252,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     <button id="btnExportCleanTxt">Texto limpio .txt</button>
     <button id="btnExportSource">Segmentar y exportar fuente .zip</button>
     <button id="btnExportAllPrompts" data-ia-guard>Exportar prompts .md</button>
+    <button id="btnLocalPackage">📦 Paquete completo .zip</button>
   </div>
   <div class="card">
     <h3>Búsqueda local BM25</h3>
@@ -517,6 +522,7 @@ function detectChapters(text){
     /^\s*(\d{1,2})\.\s{1,3}[A-ZÁÉÍÓÚÑ][^\n]{2,}/,
     /^\s*(\d{1,2}\.\d{1,2})\s{1,3}[A-ZÁÉÍÓÚÑ]/,
     /^#{1,3}\s+.{3,}/,
+    /^\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{3,59}[A-ZÁÉÍÓÚÑ]$/,   // encabezados TODO-MAYÚSCULAS
   ];
   for(const line of lines){
     const t=line.trim();
@@ -621,6 +627,25 @@ Genera la siguiente estructura exacta:
 [10-15 palabras clave separadas por comas]
 
 Integra coherentemente todos los capítulos. Mantén rigor jurídico.`;
+
+const CONSOL_BATCH_THRESHOLD=30000;  // chars: sugiere lotes cuando se supera [REQ-O]
+
+function buildBatchConsolPrompts(){
+  const done=P.blocks.filter(b=>b.response?.trim());
+  if(!done.length)return[];
+  const batches=[];let cur=[],curChars=0;
+  for(const b of done){
+    const c=(b.response||'').length;
+    if(cur.length&&curChars+c>CONSOL_BATCH_THRESHOLD){batches.push(cur);cur=[];curChars=0;}
+    cur.push(b);curChars+=c;
+  }
+  if(cur.length)batches.push(cur);
+  return batches.map((batch,i)=>{
+    const label=batches.length>1?` (lote ${i+1}/${batches.length})`:'';
+    const resps=batch.map(b=>`\n\n=== BLOQUE ${b.index}: ${b.chapter} ===\n${b.response}`).join('');
+    return consolidationPrompt+`\n\n---\n\nRESÚMENES PARCIALES${label}:`+resps;
+  });
+}
 
 function pageMarksOn(){return !!(typeof document!=='undefined'&&document.getElementById('optPageMarks')?.checked);}
 function strictValidationOn(){return !!(typeof document!=='undefined'&&document.getElementById('optStrictValidation')?.checked);}
@@ -953,7 +978,20 @@ function gotoStep(n){
   if(n===3&&P.rawText){const ta=document.getElementById('rawTextArea');if(ta)ta.value=P.rawText;updateRawStats();}
   if(n===4&&P.cleanText){const ta=document.getElementById('cleanTextArea');if(ta)ta.value=P.cleanText;}
   if(n===6)renderResponses();
-  if(n===7){const ta=document.getElementById('consolResponseArea');if(ta)ta.value=P.consolResponse||'';}
+  if(n===7){
+    const ta=document.getElementById('consolResponseArea');if(ta)ta.value=P.consolResponse||'';
+    const totalChars=P.blocks.reduce((s,b)=>s+(b.response||'').length,0);
+    const batchWrap=document.getElementById('batchWrap');
+    if(batchWrap){
+      const show=totalChars>CONSOL_BATCH_THRESHOLD;
+      batchWrap.style.display=show?'':'none';
+      if(show){
+        const batches=buildBatchConsolPrompts();
+        const bInfo=document.getElementById('batchInfo');
+        if(bInfo)bInfo.textContent=`(${totalChars.toLocaleString('es')} chars · ${batches.length} lotes sugeridos)`;
+      }
+    }
+  }
   if(n===8)renderProducts();
 }
 
@@ -1150,6 +1188,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     const ta=document.getElementById('consolResponseArea');if(!ta)return;
     ta.value=reassembleParts(ta.value);toast('Partes reensambladas.');
   });
+  document.getElementById('btnCopyBatchConsol')?.addEventListener('click',()=>{
+    if(!sensitiveGuardIA())return;
+    const batches=buildBatchConsolPrompts();
+    if(!batches.length)return toast('No hay respuestas de bloques para consolidar');
+    const md=batches.map((b,i)=>`# Lote ${i+1} de ${batches.length}\n\n${b}`).join('\n\n---\n\n');
+    download(safeName()+'_consol_lotes.md',new Blob([md],{type:'text/markdown'}));
+    toast(`${batches.length} lote(s) exportados a .md`);
+  });
 
   // Step 8
   document.getElementById('btnBuildProducts')?.addEventListener('click',()=>{
@@ -1225,6 +1271,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnExportJsonLocal')?.addEventListener('click',()=>{
     download(safeName()+'_proyecto.json',new Blob([JSON.stringify(P,null,2)],{type:'application/json'}));
   });
+  document.getElementById('btnLocalPackage')?.addEventListener('click',async()=>{
+    if(!(P.cleanText||P.rawText||P.blocks.length))return toast('Nada que exportar');
+    toast('Generando paquete...',10000);
+    const blob=await buildPackageZip();
+    download(safeName()+'_paquete.zip',blob);
+    toast('Paquete completo descargado.');
+  });
   document.getElementById('btnBm25')?.addEventListener('click',()=>{
     const query=document.getElementById('bm25Query')?.value||'';
     if(!query.trim())return toast('Ingrese una consulta');
@@ -1271,6 +1324,7 @@ if(typeof window==='undefined'){
     parseAllResponses,validateResponse,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,
+    CONSOL_BATCH_THRESHOLD,buildBatchConsolPrompts,
     canEnterStep,refreshNav,
   });
 }
