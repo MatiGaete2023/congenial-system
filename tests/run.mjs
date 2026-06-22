@@ -790,5 +790,43 @@ test('T-61 buildPackageZip funciona sin P.products solo con rawText', async () =
   includes(text, 'README_EXPORTACION', 'el paquete debe incluir el README aunque no haya productos');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-62  segment() crea bloques con excluded:false (REQ-R)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-62 segment() crea bloques con excluded:false', () => {
+  const { segment } = globalThis;
+  const blocks = segment('CAPÍTULO I\nTexto uno.\n\nCAPÍTULO II\nTexto dos.', 8000);
+  assert(blocks.length >= 1, 'debe generar al menos un bloque');
+  assert(blocks.every(b => b.excluded === false), 'todos los bloques deben tener excluded:false');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-63  toggleBlockExclude + buildBatchConsolPrompts filtra excluidos (REQ-R)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-63 bloque excluido no aparece en prompts de consolidación', () => {
+  const { toggleBlockExclude, buildBatchConsolPrompts } = globalThis;
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'Bloque Incluido', text: 'ta', response: 'resp A', excluded: false },
+    { index: 2, chapter: 'Bloque Excluido', text: 'tb', response: 'resp B', excluded: false },
+  ];
+  toggleBlockExclude(2, false); // checked=false → excluded=true
+  const batches = buildBatchConsolPrompts();
+  assert(batches.length === 1, 'debe haber 1 lote');
+  includes(batches[0], 'Bloque Incluido', 'bloque incluido debe aparecer');
+  notIncludes(batches[0], 'Bloque Excluido', 'bloque excluido no debe aparecer');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-64  updateBlockChapter renombra capítulo en P.blocks (REQ-R)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-64 updateBlockChapter renombra capítulo correctamente', () => {
+  const { updateBlockChapter } = globalThis;
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'Nombre Original', text: 'texto', response: '', excluded: false },
+  ];
+  updateBlockChapter(1, 'ANTECEDENTES DE HECHO');
+  assert(globalThis.P.blocks[0].chapter === 'ANTECEDENTES DE HECHO', 'el capítulo debe haberse renombrado');
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

@@ -59,6 +59,11 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 .export-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .export-btn-wrap{background:#fff;border:1px solid #dde;border-radius:6px;padding:10px;text-align:center}
 .export-btn-wrap p{font-size:.75rem;color:#666;margin-top:4px}
+.block-struct-row{display:flex;gap:6px;align-items:center;padding:5px 4px;border-bottom:1px solid #eef}
+.block-struct-row input[type=text]{flex:1;font-size:.82rem;padding:4px 6px;border:1px solid #ccc;border-radius:4px}
+.block-struct-row input[type=checkbox]{width:auto;margin:0}
+.block-excluded{opacity:.45}
+.block-excluded .block-header h4::before{content:'[Excluido] ';color:#999;font-weight:normal}
 </style>
 </head>
 <body>
@@ -168,6 +173,12 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     </label>
     <button id="btnSegment">Segmentar</button>
     <div id="segmentInfo" style="margin-top:8px;font-size:.83rem"></div>
+  </div>
+  <div id="blockStructureWrap" class="card" style="display:none">
+    <h3>Editar estructura de bloques (opt-in)</h3>
+    <div class="info-box">Desmarque para excluir un bloque de la IA. Renombre capítulos si es necesario.</div>
+    <div id="blockStructureList"></div>
+    <button id="btnSaveStructure" style="margin-top:8px">Aplicar y continuar al paso 6</button>
   </div>
 </section>
 <!-- STEP 6 -->
@@ -551,7 +562,7 @@ function segment(text,maxSize){
     const chunk=src.slice(start,end);
     const title=chapters[i].title.slice(0,80);
     if(sizeOf(chunk)<=maxSize){
-      blocks.push({index:bi++,chapter:title,text:chunk.trim(),response:''});
+      blocks.push({index:bi++,chapter:title,text:chunk.trim(),response:'',excluded:false});
     }else{
       const subs=_splitBySize(chunk,title,maxSize,{idxStart:bi,subParts:true});
       for(const s of subs){s.index=bi++;blocks.push(s);}
@@ -568,12 +579,32 @@ function _splitBySize(text,baseName,maxSize,opts){
     const chunk=text.slice(start,end).trim();
     if(chunk){
       const title=opts.subParts&&si>1?`${baseName} (parte ${si})`:baseName;
-      blocks.push({index:bi,chapter:title,text:chunk,response:''});
+      blocks.push({index:bi,chapter:title,text:chunk,response:'',excluded:false});
       bi++;si++;
     }
     start=end;
   }
   return blocks;
+}
+
+// ============================================================
+// ESTRUCTURA DE BLOQUES — editor opt-in (REQ-R)
+// ============================================================
+function updateBlockChapter(idx,val){const b=P.blocks.find(x=>x.index===idx);if(b){b.chapter=val;touch();}}
+function toggleBlockExclude(idx,checked){const b=P.blocks.find(x=>x.index===idx);if(b){b.excluded=!checked;touch();}}
+
+function renderBlockStructure(){
+  const c=document.getElementById('blockStructureList');
+  const w=document.getElementById('blockStructureWrap');
+  if(!c||!w)return;
+  if(!P.blocks.length){w.style.display='none';return;}
+  c.innerHTML=P.blocks.map(b=>
+    `<div class="block-struct-row">
+      <input type="checkbox" title="Incluir en IA" ${b.excluded?'':'checked'} onchange="toggleBlockExclude(${b.index},this.checked)">
+      <input type="text" value="${xmlEsc(b.chapter)}" oninput="updateBlockChapter(${b.index},this.value)">
+      <span class="stat-pill">${b.text.length.toLocaleString('es')} c</span>
+    </div>`).join('');
+  w.style.display='';
 }
 
 // ============================================================
@@ -631,7 +662,7 @@ Integra coherentemente todos los capítulos. Mantén rigor jurídico.`;
 const CONSOL_BATCH_THRESHOLD=30000;  // chars: sugiere lotes cuando se supera [REQ-O]
 
 function buildBatchConsolPrompts(){
-  const done=P.blocks.filter(b=>b.response?.trim());
+  const done=P.blocks.filter(b=>!b.excluded&&b.response?.trim());
   if(!done.length)return[];
   const batches=[];let cur=[],curChars=0;
   for(const b of done){
@@ -1019,12 +1050,17 @@ function renderResponses(){
   for(const b of P.blocks){
     const v=validateResponse(b);
     const statusClass=!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn');
-    const div=document.createElement('div');div.className='block-card';
+    const div=document.createElement('div');
+    div.className='block-card'+(b.excluded?' block-excluded':'');
     const senOn=isSensitive();
-    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span></div>
+    const excBtn=b.excluded
+      ?`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},false);renderResponses()">Incluir</button>`
+      :`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},true);renderResponses()">Excluir</button>`;
+    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span>${b.excluded?'<span class="stat-pill" style="background:#ffe0e0">excluido</span>':''}</div>
 <div class="block-actions">
-  <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${senOn?'disabled title="Bloqueado: material sensible"':''}>Copiar prompt</button>
+  <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${(senOn||b.excluded)?'disabled title="'+(b.excluded?'Bloque excluido':'Bloqueado: material sensible')+'"':''}>Copiar prompt</button>
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
+  ${excBtn}
   ${b.response?.trim()?`<span class="stat-pill" style="background:#d4edda">${v.ok?(v.warn?'⚠ formato':'✓'):'✗ corta'}</span>`:''}
 </div>
 <div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${xmlEsc(b.text)}</textarea></div>
@@ -1157,8 +1193,13 @@ document.addEventListener('DOMContentLoaded',()=>{
     const size=parseInt(document.getElementById('blockSize')?.value)||8000;
     P.blocks=segment(src,size);touch();
     document.getElementById('segmentInfo').innerHTML=
-      `<span class="stat-pill">✓ ${P.blocks.length} bloques generados</span>`;
+      `<span class="stat-pill">✓ ${P.blocks.length} bloques generados · Revise la estructura abajo antes de continuar</span>`;
+    renderBlockStructure();
     toast(`${P.blocks.length} bloques.`);
+  });
+  document.getElementById('btnSaveStructure')?.addEventListener('click',()=>{
+    const excl=P.blocks.filter(b=>b.excluded).length;
+    toast(excl?`Estructura aplicada. ${excl} bloque(s) excluido(s) de la IA.`:'Estructura aplicada.');
     gotoStep(6);
   });
 
@@ -1175,7 +1216,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Step 7
   document.getElementById('btnCopyConsol')?.addEventListener('click',()=>{
     if(!sensitiveGuardIA())return;
-    const resps=P.blocks.map(b=>`\n\n=== BLOQUE ${b.index}: ${b.chapter} ===\n${b.response||'(sin respuesta)'}`).join('');
+    const resps=P.blocks.filter(b=>!b.excluded).map(b=>`\n\n=== BLOQUE ${b.index}: ${b.chapter} ===\n${b.response||'(sin respuesta)'}`).join('');
     const prompt=consolidationPrompt+'\n\n---\n\nRESÚMENES PARCIALES:'+resps;
     navigator.clipboard.writeText(prompt).then(()=>toast('Prompt de consolidación copiado.')).catch(()=>toast('Error al copiar'));
   });
@@ -1321,6 +1362,7 @@ if(typeof window==='undefined'){
     buildPartialSummariesMarkdown,buildRawConsolidationMarkdown,buildPackageZip,
     buildOfflineMarkdown,buildManualFichaMarkdown,
     isSensitive,sensitiveGuardIA,sensitiveAllowLocal,updateSensitiveUI,
+    updateBlockChapter,toggleBlockExclude,renderBlockStructure,
     parseAllResponses,validateResponse,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,
