@@ -1,0 +1,11 @@
+{
+  "name": "rja-resumenes-juridicos-asistidos",
+  "version": "0.3.0",
+  "description": "Resúmenes Jurídicos Asistidos — procesamiento local de documentos jurídicos",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "keywords": ["juridico", "resumenes", "PDF", "DOCX", "offline"],
+  "license": "MIT"
+}
