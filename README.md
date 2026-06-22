@@ -120,12 +120,13 @@ Cargue estas librerías desde CDN o desde archivos locales antes de usar extracc
 ## Desarrollo y tests
 
 ```bash
-npm test   # → 52 OK / 0 fallidas
+npm test   # → 57 OK / 0 fallidas
 ```
 
 Los tests cubren: ZIP (CRC32, MIME, binario), DOCX (estilos, TOC, Markdown→Word),
 limpieza de texto, detección de capítulos, segmentación, pegado masivo, validación
-heurística de respuestas, modo sensible, exportaciones y más.
+heurística de respuestas, modo sensible, exportaciones, navegación de pasos,
+XSS-escape de contenido de usuario, y guard de prompts en modo sensible.
 
 ---
 
