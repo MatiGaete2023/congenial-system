@@ -142,10 +142,18 @@ del resumen maestro y carga robusta de proyectos `.json` parciales o corruptos.
 
 ---
 
+## Manual de usuario
+
+Ver `manual.html` junto al `index.html` — guía completa de cada paso, funciones avanzadas y consejos para la IA.
+
+---
+
 ## Invariantes de diseño
 
 - Sin APIs de pago. La IA se opera manualmente (copiar/pegar).
 - Ejecución 100% local como archivo HTML. Sin instalación con privilegios.
-- Los prompts sustantivos (`blockInstructions`, `consolidationPrompt`) no se modifican.
+- La **estructura de secciones** de los prompts (encabezados `##`, `###`) se mantiene
+  estable porque el parser los consume. Las instrucciones dentro de cada sección pueden
+  actualizarse para mejorar la calidad o extensión de las respuestas de IA.
 - Marcadores de página `[p. N]` y marcador de bloque `[[RJA_BLOCK_ID]]` son opt-in,
   desactivados por defecto. El comportamiento sin ellos es idéntico al original.

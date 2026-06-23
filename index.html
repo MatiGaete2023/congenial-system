@@ -15,11 +15,11 @@ header.sensitive-on{background:#8b1a2a;}
 header.sensitive-on .sensitive-toggle{font-weight:700;letter-spacing:.03em;}
 #sensitiveBanner{background:#c0392b;color:#fff;text-align:center;padding:5px 12px;font-size:.8rem;display:none;}
 body.sensitive-on #sensitiveBanner{display:block;}
-nav{background:#234;display:flex;flex-wrap:wrap;gap:2px;padding:4px 8px}
-nav button{background:none;border:none;color:#acd;padding:6px 12px;cursor:pointer;border-radius:4px;font-size:.8rem;transition:background .15s}
-nav button:hover{background:#345}
-nav button.active{background:#1a6bb5;color:#fff}
-nav button:disabled{opacity:.4;cursor:default}
+nav{background:#1c2e42;display:flex;flex-wrap:wrap;gap:3px;padding:5px 10px}
+nav button{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#cce2f8;padding:6px 13px;cursor:pointer;border-radius:4px;font-size:.8rem;font-weight:500;transition:background .15s,border-color .15s}
+nav button:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.26)}
+nav button.active{background:#1a6bb5;color:#fff;border-color:#3a8fd9}
+nav button:disabled{opacity:.4;cursor:default;color:#90b0c8}
 main{max-width:960px;margin:0 auto;padding:16px}
 .step{display:none;animation:fade .2s}
 .step.active{display:block}
@@ -70,6 +70,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 <header>
   <h1>RJA <span>v0.3.0</span></h1>
   <p>Resúmenes Jurídicos Asistidos — 100% local, sin instalación</p>
+  <a href="manual.html" target="_blank" style="color:#9ecfff;font-size:.8rem;white-space:nowrap;text-decoration:none;opacity:.9;padding:4px 8px;border:1px solid rgba(255,255,255,.2);border-radius:4px" title="Abrir manual de usuario">📖 Manual</a>
   <label class="sensitive-toggle"><input type="checkbox" id="chkSensitive"> Material sensible</label>
 </header>
 <nav id="stepNav">
@@ -196,7 +197,15 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   </div>
   <div id="blocksContainer"></div>
   <div class="card">
-    <h3>Pegado masivo de respuestas</h3>
+    <h3 style="display:flex;align-items:center;gap:8px">Pegado masivo de respuestas
+      <button id="btnBulkHelp" class="secondary" style="font-size:.72rem;padding:2px 9px;margin:0;font-weight:400">¿Qué es esto?</button>
+    </h3>
+    <div id="bulkHelpBox" class="info-box" style="display:none;margin-top:8px">
+      <strong>¿Para qué sirve?</strong> Si procesó varios bloques en la misma sesión de IA y recibió todas las respuestas juntas en un solo mensaje, puede pegarlas aquí de una vez. RJA las detectará y distribuirá automáticamente a cada bloque.<br><br>
+      <strong>Formato requerido</strong> — separe cada respuesta con uno de estos encabezados:<br>
+      <code>== Bloque 1 ==</code> &nbsp;·&nbsp; <code>## Bloque 1</code> &nbsp;·&nbsp; <code>[[RJA_BLOCK_ID:b1]]</code><br><br>
+      <em>Alternativa más simple:</em> copie el prompt de cada bloque por separado y pegue la respuesta directamente en el cuadro de texto de ese bloque (en la parte superior de esta página).
+    </div>
     <textarea id="bulkResp" rows="8" placeholder="Pega aquí múltiples respuestas del modelo. Sepáralas con:&#10;  == Bloque 1 == (o [[RJA_BLOCK_ID:b1]] o ## Bloque 1)"></textarea>
     <button id="btnBulkResp">Distribuir respuestas</button>
     <div id="bulkResult" style="margin-top:6px;font-size:.82rem"></div>
@@ -207,7 +216,15 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   <h2>7. Consolidar</h2>
   <div class="card">
     <button id="btnCopyConsol" data-ia-guard>Copiar prompt de consolidación</button>
-    <p class="info-box" style="margin-top:8px">Copie el prompt, péguelo en Claude/ChatGPT, obtenga la respuesta y péguela abajo.</p>
+    <button id="btnShowConsolPrompt" class="secondary">Ver instrucciones del prompt</button>
+    <div id="consolPromptPreview" style="display:none;margin-top:8px">
+      <div class="info-box" style="margin-bottom:6px">
+        <strong>¿Qué le pedimos a la IA?</strong> El prompt instruye a la IA a usar su máxima capacidad de salida, redactar el Resumen Maestro con entre el 20 % y el 50 % de la extensión del texto fuente, y —si la plataforma lo soporta— generar la respuesta como <strong>Artifact (Claude.ai)</strong> o <strong>Canvas (ChatGPT)</strong> para evitar truncamientos.
+      </div>
+      <textarea id="consolPromptText" rows="14" readonly style="font-size:.75rem;background:#f9fcff"></textarea>
+      <p style="font-size:.78rem;color:#666;margin-top:4px">↑ Solo las instrucciones. Al copiar el prompt completo se añaden los resúmenes de cada bloque al final.</p>
+    </div>
+    <p class="info-box" style="margin-top:8px">Copie el prompt y péguelo en <strong>Claude.ai</strong> (active "Artifact" antes de enviar) o <strong>ChatGPT</strong> (use "Canvas" si está disponible). Obtenga la respuesta y péguela abajo.</p>
     <textarea id="consolResponseArea" rows="12" placeholder="Pega aquí la respuesta de consolidación del modelo"></textarea>
     <button id="btnSaveConsol">Guardar consolidación</button>
     <button id="btnReassemble" class="secondary">Reensamblar partes ("CONTINUAR PARA COMPLETAR")</button>
@@ -640,54 +657,71 @@ function renderBlockStructure(){
 // ============================================================
 // PROMPTS — R-3: NO MODIFICAR blockInstructions ni consolidationPrompt
 // ============================================================
-const blockInstructions=`Eres un asistente jurídico experto. Analiza el siguiente fragmento de texto jurídico y elabora un resumen profesional con la siguiente estructura exacta:
+const blockInstructions=`Eres un asistente jurídico experto. Analiza el siguiente fragmento de texto jurídico y elabora un resumen profesional EXHAUSTIVO Y DETALLADO.
+
+INSTRUCCIÓN DE EXTENSIÓN (obligatoria):
+• Usa el MÁXIMO de capacidad de respuesta disponible. No te cortes.
+• El resumen debe tener entre el 20 % y el 50 % de la extensión del fragmento original.
+• NO hagas resúmenes cortos ni superficiales. Desarrolla cada punto con rigor y detalle.
+• Si tu plataforma lo permite, genera la respuesta como Artifact (Claude.ai) o Canvas (ChatGPT) para obtener el documento completo sin truncamiento.
+
+Estructura exacta requerida:
 
 ### CAPÍTULO / SECCIÓN
 [Nombre del capítulo o sección analizada]
 
 ### RESUMEN ANALÍTICO
-[Resumen detallado del contenido jurídico, normas, principios, doctrinas y argumentos relevantes. No omitas información importante.]
+[Resumen detallado y extenso del contenido jurídico. Incluye TODAS las normas, principios, doctrinas, argumentos, excepciones y matices relevantes. Usa párrafos completos y bien desarrollados. No omitas información por razones de brevedad.]
 
 ### CONCEPTOS CLAVE
-- [Concepto jurídico 1]
-- [Concepto jurídico 2]
+- [Concepto jurídico 1]: [definición/explicación concisa]
+- [Concepto jurídico 2]: [definición/explicación concisa]
 
 ### SÍNTESIS
-[Síntesis ejecutiva en 2-3 oraciones que capture la esencia del fragmento]
+[Síntesis ejecutiva en 3-5 oraciones que capture la esencia del fragmento y sus implicancias jurídicas]
 
 Mantén precisión jurídica. Incluye artículos, números de ley y referencias normativas cuando aparezcan.`;
 
-const consolidationPrompt=`Eres un asistente jurídico experto. Recibirás los resúmenes parciales de todos los capítulos/secciones de un texto jurídico. Tu tarea es consolidarlos en un dossier jurídico profesional completo.
+const consolidationPrompt=`Eres un asistente jurídico experto. Recibirás los resúmenes parciales de todos los capítulos/secciones de un texto jurídico. Tu tarea es consolidarlos en un dossier jurídico profesional COMPLETO, EXTENSO Y RIGUROSO.
 
-Genera la siguiente estructura exacta:
+INSTRUCCIÓN DE EXTENSIÓN (obligatoria):
+• Usa el MÁXIMO de capacidad de respuesta disponible. No te cortes.
+• El RESUMEN MAESTRO debe tener entre el 20 % y el 50 % de la longitud total de los resúmenes parciales recibidos.
+• Si tu plataforma lo permite, genera esta respuesta como Artifact (Claude.ai) o Canvas (ChatGPT) para obtener el documento completo sin truncamiento.
+• No hagas una consolidación superficial. Integra todos los capítulos con profundidad y coherencia.
+
+Genera la siguiente estructura exacta (NO OMITIR NINGUNA SECCIÓN):
 
 ## FICHA BIBLIOGRÁFICA
 - Título: [título]
 - Autor: [autor]
 - Año: [año]
 - Editorial: [editorial]
+- Materia: [materia principal]
 
 ## SÍNTESIS EJECUTIVA
-1. [punto clave 1]
-2. [punto clave 2]
-3. [punto clave 3]
-4. [punto clave 4]
-5. [punto clave 5]
+1. [punto clave 1 — desarrollado en 2-3 oraciones completas]
+2. [punto clave 2 — desarrollado en 2-3 oraciones completas]
+3. [punto clave 3 — desarrollado en 2-3 oraciones completas]
+4. [punto clave 4 — desarrollado en 2-3 oraciones completas]
+5. [punto clave 5 — desarrollado en 2-3 oraciones completas]
 
 ## ÍNDICE TEMÁTICO
 - [tema 1]
 - [tema 2]
+(incluye todos los temas cubiertos, sin omisiones)
 
 ## RESUMEN MAESTRO
-[Resumen integral capítulo por capítulo. Usa ## y ### para secciones y subsecciones.]
+[Resumen integral y extenso, capítulo por capítulo. Usa ## para cada capítulo principal y ### para subsecciones. Este es el núcleo del dossier: debe ser exhaustivo y bien desarrollado.]
 
 ## CONCEPTOS CLAVE
-- [concepto 1]
+- [concepto 1]: [definición o explicación]
+- [concepto 2]: [definición o explicación]
 
 ## PALABRAS CLAVE
-[10-15 palabras clave separadas por comas]
+[12-20 palabras clave separadas por comas]
 
-Integra coherentemente todos los capítulos. Mantén rigor jurídico.`;
+Integra coherentemente TODOS los capítulos recibidos. Mantén rigor jurídico. Responde con el MÁXIMO DETALLE POSIBLE.`;
 
 const CONSOL_BATCH_THRESHOLD=30000;  // chars: sugiere lotes cuando se supera [REQ-O]
 
@@ -1125,17 +1159,20 @@ function renderResponses(){
     const div=document.createElement('div');
     div.className='block-card'+(b.excluded?' block-excluded':'');
     const senOn=isSensitive();
+    // checked=true → incluir (excluded=false), checked=false → excluir (excluded=true)
     const excBtn=b.excluded
-      ?`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},false);renderResponses()">Incluir</button>`
-      :`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},true);renderResponses()">Excluir</button>`;
+      ?`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},true);renderResponses()">Incluir</button>`
+      :`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},false);renderResponses()">Excluir</button>`;
     div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span>${b.excluded?'<span class="stat-pill" style="background:#ffe0e0">excluido</span>':''}</div>
 <div class="block-actions">
   <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${(senOn||b.excluded)?'disabled title="'+(b.excluded?'Bloque excluido':'Bloqueado: material sensible')+'"':''}>Copiar prompt</button>
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
+  <button class="secondary" onclick="toggleBlockPrompt(${b.index})">Ver prompt</button>
   ${excBtn}
   ${b.response?.trim()?`<span class="stat-pill" style="background:#d4edda">${v.ok?(v.warn?'⚠ formato':'✓'):'✗ corta'}</span>`:''}
 </div>
 <div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${xmlEsc(b.text)}</textarea></div>
+<div id="blockPromptPrev${b.index}" style="display:none;margin:6px 0"><textarea rows="10" readonly style="font-size:.75rem;background:#f9fcff"></textarea><p style="font-size:.75rem;color:#666;margin-top:2px">Prompt completo enviado a la IA para este bloque.</p></div>
 <textarea rows="5" placeholder="Pegar respuesta del modelo aquí..." oninput="saveBlockResp(${b.index},this.value)">${xmlEsc(b.response||'')}</textarea>`;
     c.appendChild(div);
   }
@@ -1158,6 +1195,15 @@ function copyBlockPrompt(idx){
 function toggleBlockText(idx){
   const el=document.getElementById(`blockText${idx}`);
   if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+function toggleBlockPrompt(idx){
+  const el=document.getElementById(`blockPromptPrev${idx}`);
+  if(!el)return;
+  if(el.style.display==='none'){
+    const ta=el.querySelector('textarea');
+    if(ta){const b=P.blocks.find(x=>x.index===idx);if(b)ta.value=blockPrompt(b);}
+    el.style.display='block';
+  }else{el.style.display='none';}
 }
 function saveBlockResp(idx,val){
   const b=P.blocks.find(x=>x.index===idx);if(b){b.response=val;touch();}
@@ -1283,6 +1329,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   // Step 6
+  document.getElementById('btnBulkHelp')?.addEventListener('click',()=>{
+    const b=document.getElementById('bulkHelpBox');if(b)b.style.display=b.style.display==='none'?'block':'none';
+  });
   document.getElementById('btnBulkResp')?.addEventListener('click',()=>{
     const val=document.getElementById('bulkResp')?.value||'';
     const r=parseAllResponses(val);
@@ -1293,6 +1342,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   // Step 7
+  document.getElementById('btnShowConsolPrompt')?.addEventListener('click',()=>{
+    const box=document.getElementById('consolPromptPreview');if(!box)return;
+    if(box.style.display==='none'){
+      const ta=document.getElementById('consolPromptText');if(ta)ta.value=consolidationPrompt;
+      box.style.display='block';
+    }else{box.style.display='none';}
+  });
   document.getElementById('btnCopyConsol')?.addEventListener('click',()=>{
     if(!sensitiveGuardIA())return;
     const resps=P.blocks.filter(b=>!b.excluded).map(b=>`\n\n=== BLOQUE ${b.index}: ${b.chapter} ===\n${b.response||'(sin respuesta)'}`).join('');
