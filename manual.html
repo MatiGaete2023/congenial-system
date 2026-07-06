@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Manual de usuario — RJA v0.3.0</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;color:#222;font-size:15px;line-height:1.6}
+header{background:#1a3a5c;color:#fff;padding:16px 32px}
+header h1{font-size:1.4rem;font-weight:700}
+header p{font-size:.9rem;opacity:.75;margin-top:4px}
+.layout{display:flex;max-width:1100px;margin:0 auto;gap:0}
+nav#toc{width:220px;flex-shrink:0;padding:20px 0;position:sticky;top:0;max-height:100vh;overflow-y:auto;background:#fff;border-right:1px solid #dde}
+nav#toc a{display:block;padding:5px 16px;font-size:.8rem;color:#445;text-decoration:none;border-left:2px solid transparent;transition:border-color .15s,color .15s}
+nav#toc a:hover{color:#1a6bb5;border-left-color:#1a6bb5}
+nav#toc .toc-h2{font-weight:600;color:#1a3a5c;padding-top:12px;padding-left:16px;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+main{flex:1;padding:28px 36px;max-width:860px}
+h2{font-size:1.15rem;font-weight:700;color:#1a3a5c;border-bottom:2px solid #1a6bb5;padding-bottom:6px;margin:28px 0 14px}
+h3{font-size:.98rem;font-weight:600;color:#234;margin:18px 0 8px}
+h4{font-size:.88rem;font-weight:600;color:#456;margin:14px 0 6px}
+p{margin-bottom:10px}
+ul,ol{margin:8px 0 12px 22px}
+li{margin-bottom:5px;font-size:.9rem}
+code{background:#eef3f8;border:1px solid #d0dce8;border-radius:3px;padding:1px 5px;font-family:monospace;font-size:.82rem}
+pre{background:#f0f4f8;border:1px solid #d0dce8;border-radius:5px;padding:12px 16px;font-family:monospace;font-size:.82rem;overflow-x:auto;margin:10px 0 14px}
+.callout{border-radius:5px;padding:12px 14px;margin:12px 0;font-size:.87rem}
+.callout.info{background:#eaf3fb;border-left:4px solid #1a6bb5}
+.callout.warn{background:#fff8e1;border-left:4px solid #f0a500}
+.callout.tip{background:#e8f5e9;border-left:4px solid #27ae60}
+.callout.danger{background:#fde;border-left:4px solid #c0392b}
+.step-badge{display:inline-block;background:#1a6bb5;color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-size:.78rem;font-weight:700;margin-right:6px;flex-shrink:0}
+.paso-header{display:flex;align-items:center;margin:28px 0 8px}
+.paso-header h2{border:none;padding:0;margin:0;font-size:1.15rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:10px 0 16px}
+th{background:#1a3a5c;color:#fff;padding:8px 10px;text-align:left}
+td{padding:7px 10px;border-bottom:1px solid #eee}
+tr:nth-child(even) td{background:#f8f9fc}
+.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.75rem;font-weight:600}
+.badge.local{background:#d4edda;color:#1a5c2e}
+.badge.red{background:#fde;color:#8b1a2a}
+.badge.opt{background:#fff3cd;color:#6a4c00}
+a{color:#1a6bb5;text-decoration:none}
+a:hover{text-decoration:underline}
+.section-sep{border:none;border-top:1px solid #e0e6ee;margin:32px 0}
+footer{text-align:center;padding:20px;font-size:.8rem;color:#888;background:#fff;border-top:1px solid #eee;margin-top:32px}
+</style>
+</head>
+<body>
+<header>
+  <h1>RJA v0.3.0 — Manual de usuario</h1>
+  <p>Resúmenes Jurídicos Asistidos · Guía completa de uso</p>
+</header>
+<div class="layout">
+<nav id="toc">
+  <div class="toc-h2" style="padding-top:16px">Contenidos</div>
+  <a href="#intro">¿Qué es RJA?</a>
+  <a href="#local-vs-nube">Local vs. nube</a>
+  <a href="#inicio-rapido">Inicio rápido</a>
+  <div class="toc-h2">Los 10 pasos</div>
+  <a href="#paso1">1 Cargar</a>
+  <a href="#paso2">2 Metadatos</a>
+  <a href="#paso3">3 Extraer</a>
+  <a href="#paso4">4 Limpiar</a>
+  <a href="#paso5">5 Segmentar</a>
+  <a href="#paso6">6 Resumir</a>
+  <a href="#paso7">7 Consolidar</a>
+  <a href="#paso8">8 Productos</a>
+  <a href="#paso9">9 Exportar</a>
+  <a href="#paso10">⚙ Herramientas locales</a>
+  <div class="toc-h2">Avanzado</div>
+  <a href="#sensible">Modo material sensible</a>
+  <a href="#consejos-ia">Consejos para la IA</a>
+  <a href="#faq">Preguntas frecuentes</a>
+</nav>
+<main>
+
+<!-- INTRO -->
+<section id="intro">
+<h2>¿Qué es RJA?</h2>
+<p><strong>RJA (Resúmenes Jurídicos Asistidos)</strong> es una herramienta de escritorio que lo ayuda a resumir y estructurar documentos jurídicos extensos. Funciona como un único archivo <code>index.html</code>: se abre en el navegador y <strong>no requiere instalación, ni servidor, ni cuenta</strong>.</p>
+<p>El flujo básico es: usted carga un documento, RJA lo divide en fragmentos manejables, genera prompts de resumen para cada fragmento, usted los lleva a Claude.ai o ChatGPT y trae las respuestas de vuelta. Finalmente RJA consolida todo en un dossier exportable en Word, Markdown y otros formatos.</p>
+<div class="callout info"><strong>La IA NO está embebida.</strong> RJA genera los prompts y procesa las respuestas, pero usted lleva y trae el texto manualmente. Esto es intencional: usted controla qué información sale y a qué servicio va.</div>
+</section>
+
+<hr class="section-sep">
+
+<!-- LOCAL VS NUBE -->
+<section id="local-vs-nube">
+<h2>¿Qué es local y qué requiere internet?</h2>
+<table>
+  <thead><tr><th>Operación</th><th>Dónde ocurre</th><th>Red</th></tr></thead>
+  <tbody>
+    <tr><td>Limpieza, segmentación, estadísticas</td><td>Navegador (local)</td><td><span class="badge local">Sin red</span></td></tr>
+    <tr><td>Generación de DOCX, ZIP, Markdown</td><td>Navegador (local)</td><td><span class="badge local">Sin red</span></td></tr>
+    <tr><td>Búsqueda BM25, ficha bibliográfica</td><td>Navegador (local)</td><td><span class="badge local">Sin red</span></td></tr>
+    <tr><td>Exportar / guardar proyecto (.json)</td><td>Navegador (local)</td><td><span class="badge local">Sin red</span></td></tr>
+    <tr><td>Extracción de texto PDF (nativo)</td><td>PDF.js en navegador</td><td><span class="badge opt">Solo primera carga</span></td></tr>
+    <tr><td>Extracción de DOCX</td><td>Mammoth.js en navegador</td><td><span class="badge opt">Solo primera carga</span></td></tr>
+    <tr><td><strong>Resúmenes de bloques</strong></td><td><strong>IA externa (Claude/ChatGPT)</strong></td><td><span class="badge red">Sí, siempre</span></td></tr>
+    <tr><td><strong>Consolidación</strong></td><td><strong>IA externa (Claude/ChatGPT)</strong></td><td><span class="badge red">Sí, siempre</span></td></tr>
+  </tbody>
+</table>
+</section>
+
+<hr class="section-sep">
+
+<!-- INICIO RÁPIDO -->
+<section id="inicio-rapido">
+<h2>Inicio rápido — el flujo en 10 pasos</h2>
+<ol>
+  <li><strong>Abra</strong> <code>index.html</code> en Chrome, Firefox, Edge o Safari.</li>
+  <li><strong>Paso 1 — Cargar:</strong> seleccione su archivo (PDF, DOCX, TXT o imagen).</li>
+  <li><strong>Paso 2 — Metadatos:</strong> rellene el título y autor (se usan en el dossier final).</li>
+  <li><strong>Paso 3 — Extraer:</strong> pulse "Extraer texto". Si el archivo es PDF, necesita cargar PDF.js primero (botón "Info librerías").</li>
+  <li><strong>Paso 4 — Limpiar:</strong> pulse "Limpiar texto" para eliminar encabezados, pies de página y ruido tipográfico.</li>
+  <li><strong>Paso 5 — Segmentar:</strong> pulse "Segmentar". RJA divide el texto en bloques de ~8 000 caracteres ajustados a los límites de los modelos de IA.</li>
+  <li><strong>Paso 6 — Resumir:</strong> para cada bloque, pulse "Copiar prompt", péguelo en Claude.ai o ChatGPT, active "Artifact" o "Canvas", obtenga la respuesta y péguela en el cuadro de texto del bloque.</li>
+  <li><strong>Paso 7 — Consolidar:</strong> pulse "Copiar prompt de consolidación", péguelo en la IA y traiga la respuesta.</li>
+  <li><strong>Paso 8 — Construir productos:</strong> pulse "Construir productos". RJA parsea la respuesta y genera la ficha, síntesis, índice y resumen maestro.</li>
+  <li><strong>Paso 9 — Exportar:</strong> descargue el paquete completo (.zip con .docx, .md y más).</li>
+</ol>
+</section>
+
+<hr class="section-sep">
+
+<!-- PASO 1 -->
+<div class="paso-header" id="paso1">
+  <span class="step-badge">1</span><h2>Cargar documento</h2>
+</div>
+
+<h3>Tipos de archivo soportados</h3>
+<ul>
+  <li><strong>TXT / MD</strong> — funcionan sin ninguna librería adicional.</li>
+  <li><strong>PDF con texto</strong> — requiere PDF.js (ver abajo). Extrae el texto digital, no hace OCR.</li>
+  <li><strong>DOCX</strong> — requiere Mammoth.js.</li>
+  <li><strong>PNG / JPG / WEBP</strong> — OCR experimental con Tesseract.js. Requiere internet para descargar los modelos de idioma (~30 MB).</li>
+</ul>
+
+<h3>Cargar librerías (Info librerías)</h3>
+<p>Por defecto no se descarga nada. Si necesita extraer PDF o DOCX, pulse <strong>"Info librerías"</strong> → <strong>"Cargar librerías desde CDN"</strong>. Esto descarga PDF.js, Mammoth.js y Tesseract.js una vez; quedan en caché para sesiones futuras. También puede colocar los archivos <code>pdf.min.js</code>, <code>pdf.worker.min.js</code> y <code>mammoth.browser.min.js</code> en la misma carpeta que el HTML para uso completamente offline.</p>
+
+<h3>Nuevo proyecto / Cargar proyecto</h3>
+<ul>
+  <li><strong>Nuevo proyecto</strong>: borra todo el estado actual y empieza desde cero. Pide confirmación.</li>
+  <li><strong>Cargar proyecto (.json)</strong>: reanuda un trabajo guardado previamente desde el paso 9 → "Proyecto .json". Si el archivo está incompleto o es de una versión anterior, RJA lo normaliza automáticamente completando los campos faltantes.</li>
+</ul>
+
+<hr class="section-sep">
+
+<!-- PASO 2 -->
+<div class="paso-header" id="paso2">
+  <span class="step-badge">2</span><h2>Metadatos bibliográficos</h2>
+</div>
+<p>Rellene los campos de la ficha bibliográfica. Estos datos aparecen en la portada del dossier Word y en la sección "Ficha bibliográfica". No son obligatorios, pero mejoran el producto final.</p>
+<table>
+  <thead><tr><th>Campo</th><th>Uso</th></tr></thead>
+  <tbody>
+    <tr><td>Título</td><td>Aparece en portada del DOCX, nombre del archivo exportado y ficha</td></tr>
+    <tr><td>Autor</td><td>Ficha y portada</td></tr>
+    <tr><td>Año / Editorial / Edición / Páginas</td><td>Ficha bibliográfica</td></tr>
+    <tr><td>Materia principal / Submaterias</td><td>Ficha y metadatos Obsidian</td></tr>
+    <tr><td>Jurisdicción</td><td>Solo se guarda en el proyecto; no aparece en el DOCX actual</td></tr>
+  </tbody>
+</table>
+
+<hr class="section-sep">
+
+<!-- PASO 3 -->
+<div class="paso-header" id="paso3">
+  <span class="step-badge">3</span><h2>Extraer texto</h2>
+</div>
+<p>Pulse <strong>"Extraer texto del archivo"</strong>. El texto extraído aparece en el área inferior. También puede pegar texto directamente en esa área y pulsar <strong>"Usar texto del área como rawText"</strong>.</p>
+
+<h3>Marcadores de página (opt-in)</h3>
+<p>Active la casilla <strong>"Conservar marcadores de página [p. N]"</strong> si desea que el texto incluya marcas del tipo <code>[p. 23]</code> al inicio de cada página. Esto es útil para citas bibliográficas. Está desactivado por defecto.</p>
+
+<h3>Problemas comunes</h3>
+<ul>
+  <li><strong>PDF escaneado (imágenes):</strong> PDF.js solo extrae texto digital. Si el PDF es una foto/escaneo sin capa de texto, necesita el OCR de Tesseract.js (experimental, requiere internet). En estos casos puede obtener mejor resultado con Adobe Acrobat u otro OCR externo y pegar el texto directamente.</li>
+  <li><strong>"PDF.js no cargado":</strong> pulse "Info librerías" → "Cargar librerías desde CDN" primero.</li>
+</ul>
+
+<hr class="section-sep">
+
+<!-- PASO 4 -->
+<div class="paso-header" id="paso4">
+  <span class="step-badge">4</span><h2>Limpiar texto</h2>
+</div>
+<p>Pulse <strong>"Limpiar texto automáticamente"</strong>. El limpiador elimina:</p>
+<ul>
+  <li>Líneas que son solo números (números de página)</li>
+  <li>Líneas de guiones, puntos o iguales repetidos (separadores)</li>
+  <li>Encabezados y pies de página repetidos (líneas que aparecen más de 1 % de las veces)</li>
+  <li>Múltiples líneas en blanco consecutivas (reduce a máximo 2)</li>
+</ul>
+<p>Puede ver qué se eliminó pulsando <strong>"Ver líneas eliminadas"</strong>. Si necesita correcciones manuales, edite el texto en el área inferior y pulse <strong>"Guardar edición manual"</strong>.</p>
+
+<hr class="section-sep">
+
+<!-- PASO 5 -->
+<div class="paso-header" id="paso5">
+  <span class="step-badge">5</span><h2>Segmentar texto</h2>
+</div>
+<p>RJA divide el texto en bloques para que quepan en la ventana de contexto de los modelos de IA. Pulse <strong>"Segmentar"</strong>.</p>
+
+<h3>Tamaño de bloque</h3>
+<p>El valor por defecto es <strong>8 000 caracteres</strong>. Para modelos con ventana grande (Claude.ai, GPT-4o) puede aumentarlo a 20 000–40 000 y procesar menos bloques.</p>
+<ul>
+  <li>Si el texto tiene capítulos claramente marcados, RJA los detecta y crea un bloque por capítulo (partiéndolo si es demasiado largo).</li>
+  <li>Si no hay estructura detectable, divide por tamaño respetando párrafos.</li>
+</ul>
+
+<h3>Editor de estructura de bloques</h3>
+<p>Después de segmentar aparece el <strong>Editor de estructura</strong>:</p>
+<ul>
+  <li><strong>Marcar / desmarcar:</strong> los bloques sin marcar quedan "excluidos" y no se envían a la IA (no aparecen en los prompts). Útil para apéndices, bibliografías o texto irrelevante.</li>
+  <li><strong>Renombrar capítulo:</strong> edite el nombre del bloque para que sea más descriptivo. Aparece en el dossier final.</li>
+</ul>
+<p>Pulse <strong>"Aplicar y continuar al paso 6"</strong> cuando termine.</p>
+
+<hr class="section-sep">
+
+<!-- PASO 6 -->
+<div class="paso-header" id="paso6">
+  <span class="step-badge">6</span><h2>Resumir bloques</h2>
+</div>
+<p>Este es el paso central. Para cada bloque:</p>
+<ol>
+  <li>Pulse <strong>"Copiar prompt"</strong> — el prompt completo queda en el portapapeles.</li>
+  <li>Abra Claude.ai o ChatGPT en otra pestaña.</li>
+  <li><strong>Active "Artifact" (Claude.ai) o "Canvas" (ChatGPT)</strong> antes de pegar (ver sección <a href="#consejos-ia">Consejos para la IA</a>).</li>
+  <li>Pegue el prompt y espere la respuesta.</li>
+  <li>Copie la respuesta completa y péguela en el cuadro de texto del bloque correspondiente en RJA.</li>
+</ol>
+
+<h3>Ver prompt</h3>
+<p>Pulse <strong>"Ver prompt"</strong> para inspeccionar el prompt completo antes de copiarlo. Verá las instrucciones de extensión (20–50%), la solicitud de Artifact/Canvas y la estructura de secciones esperada.</p>
+
+<h3>Ver texto</h3>
+<p>Pulse <strong>"Ver texto"</strong> para ver el fragmento del documento que corresponde al bloque, sin salir del paso 6.</p>
+
+<h3>Excluir / incluir bloques</h3>
+<p>Puede excluir bloques que no quiera resumir (apéndices, listas de referencias, etc.) pulsando <strong>"Excluir"</strong>. El bloque queda sombreado y no se incluye en los prompts de consolidación. Para revertirlo, pulse <strong>"Incluir"</strong>.</p>
+
+<h3>Indicadores de estado</h3>
+<ul>
+  <li>Círculo gris — sin respuesta todavía.</li>
+  <li>Círculo verde + <strong>✓</strong> — respuesta válida con los encabezados esperados.</li>
+  <li>Círculo naranja + <strong>⚠ formato</strong> — respuesta recibida pero sin los encabezados esperados (puede ser igualmente válida).</li>
+  <li>Círculo naranja + <strong>✗ corta</strong> — respuesta demasiado corta para el tamaño del bloque; conviene repetir el prompt pidiendo más detalle.</li>
+</ul>
+
+<h3>Validación estricta (opt-in)</h3>
+<p>Active la casilla <strong>"Validación estricta"</strong> si quiere que el prompt incluya el marcador <code>[[RJA_BLOCK_ID:bN]]</code>. La IA debe repetir este marcador al inicio de su respuesta, lo que permite identificar automáticamente a qué bloque pertenece cada respuesta.</p>
+
+<h3>Pegado masivo de respuestas</h3>
+<p>Si procesó varios bloques en la misma sesión de IA y obtuvo todas las respuestas en un solo mensaje, puede pegarlas en el área <strong>"Pegado masivo"</strong> y RJA las distribuirá automáticamente. Para que funcione, cada respuesta debe comenzar con un encabezado reconocible:</p>
+<ul>
+  <li><code>== Bloque 1 ==</code></li>
+  <li><code>## Bloque 1</code></li>
+  <li><code>[[RJA_BLOCK_ID:b1]]</code></li>
+</ul>
+
+<hr class="section-sep">
+
+<!-- PASO 7 -->
+<div class="paso-header" id="paso7">
+  <span class="step-badge">7</span><h2>Consolidar</h2>
+</div>
+<p>Una vez que todos (o la mayoría de) los bloques tienen respuesta, pase a la consolidación.</p>
+<ol>
+  <li>Pulse <strong>"Copiar prompt de consolidación"</strong>.</li>
+  <li>Péguelo en Claude.ai (active Artifact) o ChatGPT (active Canvas).</li>
+  <li>Obtenga la respuesta completa y péguela en el área de texto.</li>
+  <li>Pulse <strong>"Guardar consolidación"</strong>.</li>
+</ol>
+
+<h3>Ver instrucciones del prompt</h3>
+<p>Pulse <strong>"Ver instrucciones del prompt"</strong> para ver exactamente qué le pedimos a la IA: extensión 20-50% del total, estructura de secciones, uso de Artifact/Canvas.</p>
+
+<h3>Consolidación por lotes (texto extenso)</h3>
+<p>Si el total de resúmenes supera los 30 000 caracteres, RJA le avisa y habilita el botón <strong>"Exportar lotes de consolidación (.md)"</strong>. Esto descarga un archivo Markdown con los lotes divididos. Debe enviar cada lote a la IA por separado y luego ensamblar las respuestas.</p>
+
+<h3>Reensamblar partes</h3>
+<p>Si la IA devuelve "CONTINUAR PARA COMPLETAR" porque la respuesta fue muy larga, copie ambas partes, únelas en el área de texto y pulse <strong>"Reensamblar partes"</strong>. RJA eliminará los marcadores de continuación.</p>
+
+<hr class="section-sep">
+
+<!-- PASO 8 -->
+<div class="paso-header" id="paso8">
+  <span class="step-badge">8</span><h2>Construir productos</h2>
+</div>
+<p>Pulse <strong>"Construir productos desde consolidación"</strong>. RJA parsea la respuesta de consolidación y extrae:</p>
+<ul>
+  <li><strong>Ficha bibliográfica</strong> — prioriza los metadatos que ingresó en el paso 2; usa los del texto si faltan.</li>
+  <li><strong>Síntesis ejecutiva</strong> — lista numerada de puntos clave.</li>
+  <li><strong>Índice temático</strong> — lista de temas cubiertos.</li>
+  <li><strong>Resumen maestro</strong> — el texto completo del resumen con encabezados ##/### preservados.</li>
+  <li><strong>Conceptos clave</strong> — definiciones extraídas.</li>
+  <li><strong>Palabras clave</strong> — etiquetas para Obsidian y metadatos.</li>
+</ul>
+<p>La vista previa muestra el conteo de elementos. Si algo falta, es posible que la respuesta del modelo no siguió la estructura. En ese caso vuelva al paso 7 y repita la consolidación.</p>
+
+<hr class="section-sep">
+
+<!-- PASO 9 -->
+<div class="paso-header" id="paso9">
+  <span class="step-badge">9</span><h2>Exportar</h2>
+</div>
+<table>
+  <thead><tr><th>Botón</th><th>Qué descarga</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Paquete completo</strong></td><td>ZIP con todo lo de abajo en una sola descarga</td></tr>
+    <tr><td>Dossier .docx</td><td>Word con portada, TOC navegable, ficha, síntesis, índice, resumen maestro y conceptos</td></tr>
+    <tr><td>Dossier .md</td><td>El mismo dossier en Markdown</td></tr>
+    <tr><td>Fragmentos resumidos .md</td><td>Los resúmenes de cada bloque concatenados (sin consolidar)</td></tr>
+    <tr><td>Consolidado bruto .md</td><td>La respuesta íntegra del modelo, sin procesar (útil para auditoría)</td></tr>
+    <tr><td>Proyecto .json</td><td>Respaldo reanudable: todo el estado del proyecto. Puede reabrirlo desde el paso 1.</td></tr>
+    <tr><td>Prompts .md</td><td>Todos los prompts usados (bloques + consolidación). Bloqueado en modo material sensible.</td></tr>
+  </tbody>
+</table>
+<div class="callout tip"><strong>Consejo:</strong> descargue siempre el "Proyecto .json" al terminar. Le permite reanudar el trabajo sin volver a procesar la IA si necesita hacer ajustes.</div>
+
+<hr class="section-sep">
+
+<!-- PASO 10 -->
+<div class="paso-header" id="paso10">
+  <span class="step-badge">⚙</span><h2>Herramientas locales (sin IA)</h2>
+</div>
+<p>Accesible desde cualquier punto del flujo una vez que hay texto extraído. <strong>No requiere haber pasado por la IA.</strong></p>
+
+<h3>Exportaciones locales</h3>
+<ul>
+  <li><strong>Convertir a .md:</strong> convierte el texto limpio a Markdown con la estructura de capítulos detectada.</li>
+  <li><strong>Ficha bibliográfica .md:</strong> genera la ficha con los metadatos ingresados y estadísticas del texto.</li>
+  <li><strong>Texto limpio .txt:</strong> descarga el texto limpiado.</li>
+  <li><strong>Segmentar y exportar fuente .zip:</strong> genera un ZIP con un archivo .txt por bloque.</li>
+  <li><strong>Paquete completo .zip:</strong> mismo que el paso 9 pero accesible sin haber consolidado.</li>
+</ul>
+
+<h3>Búsqueda local BM25</h3>
+<p>Busca por relevancia en el texto del documento usando el algoritmo BM25 (similar a los motores de búsqueda). No envía nada a internet. Ingrese términos y pulse "Buscar". Los resultados muestran el fragmento con mayor puntuación primero.</p>
+
+<hr class="section-sep">
+
+<!-- MODO SENSIBLE -->
+<section id="sensible">
+<h2>Modo material sensible</h2>
+<p>Active el toggle <strong>"Material sensible"</strong> en el encabezado cuando trabaje con documentos confidenciales. El encabezado cambia a rojo como recordatorio visual.</p>
+
+<h3>Qué bloquea</h3>
+<ul>
+  <li>Copiar prompt de bloque (el texto del fragmento no sale al portapapeles)</li>
+  <li>Copiar prompt de consolidación</li>
+  <li>Exportar prompts .md</li>
+</ul>
+
+<h3>Qué permanece activo</h3>
+<ul>
+  <li>Extracción, limpieza, segmentación</li>
+  <li>Exportaciones DOCX, ZIP, Markdown, JSON</li>
+  <li>Búsqueda BM25, ficha manual</li>
+  <li>Todas las herramientas locales</li>
+</ul>
+
+<div class="callout danger"><strong>Nota importante:</strong> el modo material sensible <em>bloquea los prompts</em>, no cifra el proyecto. El archivo <code>_proyecto.json</code> exportado contiene el texto completo en texto plano. Trátelo con las mismas precauciones que el documento original.</div>
+
+<h3>Material sensible y guardado automático</h3>
+<p>RJA guarda automáticamente un borrador del proyecto en el almacenamiento local del navegador (ver FAQ). <strong>Al activar el modo material sensible, ese borrador se elimina y el autoguardado se desactiva</strong>: el texto del documento no queda en disco. Como contrapartida, si cierra la pestaña con modo sensible activo perderá el trabajo no exportado — el navegador se lo advertirá antes de cerrar. Exporte el <code>_proyecto.json</code> manualmente si necesita pausar.</p>
+</section>
+
+<hr class="section-sep">
+
+<!-- CONSEJOS IA -->
+<section id="consejos-ia">
+<h2>Consejos para mejores resultados de IA</h2>
+
+<h3>Usar Artifact (Claude.ai)</h3>
+<p>Claude.ai tiene un límite de longitud visible en la interfaz de chat. Para textos largos, la respuesta puede quedar truncada. Para evitarlo:</p>
+<ol>
+  <li>Abra Claude.ai en un proyecto nuevo o en la ventana principal de chat.</li>
+  <li>Antes de pegar el prompt, pulse el ícono de <strong>documento / hoja</strong> junto al campo de texto para activar el modo "Artifact".</li>
+  <li>El artefacto se muestra en un panel separado y no tiene el mismo límite de longitud visible.</li>
+  <li>Copie el contenido del artefacto completo (use "Copiar" dentro del panel del artefacto).</li>
+</ol>
+
+<h3>Usar Canvas (ChatGPT)</h3>
+<ol>
+  <li>Abra ChatGPT con un modelo que soporte Canvas (GPT-4o en la interfaz web).</li>
+  <li>Escriba o pegue el prompt. Si ChatGPT no abre automáticamente Canvas, pida "Genera esto como un Canvas" al inicio.</li>
+  <li>El Canvas permite ver y copiar el documento completo aunque sea largo.</li>
+</ol>
+
+<h3>Qué hacer si la respuesta se corta</h3>
+<p>Si la IA devuelve "CONTINUAR PARA COMPLETAR" o similar:</p>
+<ol>
+  <li>Responda en el mismo chat: <em>"Continúa desde donde lo dejaste"</em></li>
+  <li>Copie ambas partes y únelas en el área de texto de RJA.</li>
+  <li>Pulse <strong>"Reensamblar partes"</strong> en el paso 7.</li>
+</ol>
+
+<h3>El límite de extensión 20%–50%</h3>
+<p>Los prompts de RJA instruyen a la IA a que el resumen tenga entre el 20% y el 50% del texto fuente. Esto sirve para:</p>
+<ul>
+  <li><strong>Evitar resúmenes superficiales</strong> (menos del 20%): se perdería información relevante.</li>
+  <li><strong>Evitar "resúmenes" casi completos</strong> (más del 50%): no aportarían valor de síntesis.</li>
+</ul>
+<p>Si el resumen obtenido le parece demasiado corto, repita el prompt añadiendo: <em>"El resumen anterior es demasiado breve. Amplíalo con más detalle en cada sección hasta alcanzar al menos el 30% de la extensión del fragmento."</em></p>
+
+<h3>Estructura esperada de los resúmenes de bloque</h3>
+<p>Cada resumen de bloque debe contener:</p>
+<pre>### CAPÍTULO / SECCIÓN
+[nombre]
+
+### RESUMEN ANALÍTICO
+[texto extenso]
+
+### CONCEPTOS CLAVE
+- Concepto 1: definición
+
+### SÍNTESIS
+[3-5 oraciones]</pre>
+<p>Si la respuesta no tiene estos encabezados, el indicador mostrará "⚠ formato". La respuesta igual puede usarse, pero el pegado masivo podría no funcionar correctamente.</p>
+
+<h3>Estructura esperada de la consolidación</h3>
+<p>La respuesta de consolidación debe contener estas secciones <strong>en este orden</strong> y con estos encabezados exactos (RJA los usa para parsear el documento):</p>
+<pre>## FICHA BIBLIOGRÁFICA
+## SÍNTESIS EJECUTIVA
+## ÍNDICE TEMÁTICO
+## RESUMEN MAESTRO
+## CONCEPTOS CLAVE
+## PALABRAS CLAVE</pre>
+<p>Dentro del RESUMEN MAESTRO puede usar <code>##</code> y <code>###</code> libremente para los subcapítulos, ya que RJA los preserva.</p>
+</section>
+
+<hr class="section-sep">
+
+<!-- FAQ -->
+<section id="faq">
+<h2>Preguntas frecuentes</h2>
+
+<h4>¿Funciona sin internet?</h4>
+<p>Para TXT y MD, sí completamente. Para PDF/DOCX necesita cargar las librerías al menos una vez (quedan en caché). Para los resúmenes e IA, no: ese paso requiere internet y una cuenta en Claude.ai o ChatGPT.</p>
+
+<h4>¿Se envía mi documento a Anthropic o OpenAI automáticamente?</h4>
+<p>No. RJA nunca envía nada automáticamente. Solo cuando usted copia un prompt y lo pega en Claude.ai o ChatGPT, ese fragmento viaja al servidor del servicio según sus propias políticas de privacidad. Use el modo Material Sensible para bloquear esa posibilidad.</p>
+
+<h4>¿Qué tamaño de bloque debo usar?</h4>
+<p>8 000 caracteres funciona bien para Claude 3 Haiku y GPT-3.5. Para Claude 3.5 Sonnet, Claude 3 Opus o GPT-4o puede aumentar a 20 000–40 000 caracteres y procesar menos bloques con más contexto cada uno.</p>
+
+<h4>¿Puedo reanudar un trabajo guardado?</h4>
+<p>Sí, de dos formas. (1) <strong>Automática:</strong> RJA guarda un borrador en el almacenamiento local del navegador cada pocos segundos; al reabrir la página aparece un banner "Hay una sesión anterior guardada" con botones Restaurar/Descartar. (2) <strong>Manual:</strong> exporte el "Proyecto .json" desde el paso 9 o 10 y reábralo con "Cargar proyecto (.json)" en el paso 1. El borrador automático se elimina con "Nuevo proyecto", con "Borrar datos locales" o al activar el modo material sensible.</p>
+
+<h4>¿Dónde se guarda el borrador automático? ¿Es privado?</h4>
+<p>En el <code>localStorage</code> del navegador, solo en su equipo — nunca viaja por la red. Cualquier persona con acceso a su sesión de navegador podría leerlo, por eso el modo material sensible lo desactiva y purga. El límite es ~5 MB: si el proyecto lo supera, RJA le avisará para que exporte el .json manualmente.</p>
+
+<h4>¿Por qué el dossier Word tiene un índice que dice "actualice con clic derecho"?</h4>
+<p>El TOC (tabla de contenidos) se genera con un campo de Word que se actualiza automáticamente. Al abrir el archivo en Word, pulse <kbd>Ctrl+A</kbd> para seleccionar todo y luego <kbd>F9</kbd> para actualizar todos los campos, incluyendo el índice.</p>
+
+<h4>¿Los bloques excluidos afectan la exportación?</h4>
+<p>Los bloques excluidos no aparecen en los prompts de consolidación ni en los lotes de consolidación. Sí aparecen en la exportación de "Fragmentos resumidos" (con el estado "sin respuesta") y en el archivo JSON del proyecto.</p>
+
+<h4>¿Puedo editar la respuesta de un bloque después de guardarla?</h4>
+<p>Sí, simplemente edite el texto en el cuadro de respuesta del bloque. Los cambios se guardan automáticamente al escribir.</p>
+
+<h4>¿Qué significa el mensaje "Sin separadores reconocidos" en el pegado masivo?</h4>
+<p>RJA no encontró ningún encabezado de bloque en el texto pegado. Asegúrese de que cada respuesta del modelo esté precedida por <code>== Bloque N ==</code>, <code>## Bloque N</code> o <code>[[RJA_BLOCK_ID:bN]]</code>. Si la IA no incluyó esos marcadores, puede añadirlos manualmente o pegar cada respuesta individualmente en el cuadro de cada bloque.</p>
+</section>
+
+</main>
+</div>
+<footer>RJA v0.3.0 · Manual de usuario · <a href="index.html">Volver a la aplicación</a></footer>
+</body>
+</html>
