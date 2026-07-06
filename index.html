@@ -280,7 +280,8 @@
     <div class="step hidden" data-step="5">
       <div class="panel">
         <h2>6 · Consolidación</h2>
-        <p class="help">Con las respuestas parciales el sistema arma un <b>prompt de consolidación</b> que pide a Claude/ChatGPT generar todos los productos en un formato estructurado. Copie el prompt, ejecútelo, y pegue la respuesta consolidada.</p>
+        <p class="help">Con las respuestas parciales el sistema arma un <b>prompt de consolidación</b> que pide a Claude/ChatGPT generar todos los productos en un formato estructurado. Copie el prompt, ejecútelo, y pegue la respuesta consolidada. En obras muy extensas la consolidación se divide automáticamente en <b>etapas</b> + un prompt de <b>fusión final</b>.</p>
+        <div id="consolStages"></div>
         <div class="row">
           <button id="btnCopyConsol" class="primary copybtn">Copiar prompt de consolidación</button>
           <span id="consolCopied" class="check ok hidden">✓ copiado</span>
@@ -426,6 +427,7 @@ function blankProject(){
     meta:{title:'',author:'',year:'',publisher:'',edition:'',pages:'',subject:'',subsubjects:'',juris:''},
     rawText:'', cleanText:'',
     blocks:[],          // {id,index,chapter,text,response}
+    consolPartials:[],  // consolidaciones parciales (modo jerárquico)
     consolResponse:'',
     products:null,      // parsed products object
   };
@@ -455,6 +457,7 @@ function normalizeProject(data){
       text: typeof b?.text==='string'?b.text:'',
       response: typeof b?.response==='string'?b.response:''
     })):[],
+    consolPartials: Array.isArray(src.consolPartials)?src.consolPartials.map(x=>typeof x==='string'?x:''):[],
     consolResponse: typeof src.consolResponse==='string'?src.consolResponse:'',
     products
   };
@@ -530,7 +533,7 @@ async function loadFile(file){
   fileBuffer=await file.arrayBuffer();
   $('#btnExtract').disabled=false;
   P.fileName=file.name; P.fileType=ext; P.rawText=''; P.cleanText=''; P.blocks=[];
-  P.consolResponse=''; P.products=null; P.step=0;
+  P.consolPartials=[]; P.consolResponse=''; P.products=null; P.step=0;
   if(!P.meta.title)P.meta.title=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');
   $('#metaTitle').value=P.meta.title;
   $('#loadInfo').classList.remove('hidden');
@@ -1143,9 +1146,13 @@ function updateRespStats(){
 /* ================================================================== *
  *  STEP 5 — consolidación
  * ================================================================== */
-function consolidationPrompt(){
+// Presupuesto de caracteres de parciales para un único prompt de consolidación;
+// por encima se pasa a consolidación jerárquica (etapas + fusión).
+const CONSOL_BUDGET=60000;
+function consolidationPrompt(partialsOverride){
   const m=P.meta;
-  const partials=P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
+  const partials=partialsOverride!=null?partialsOverride
+    :P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
   return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final ESPECÍFICO Y DETALLADO, no general.
 
 EXTENSIÓN MÁXIMA DE CONSOLIDACIÓN (obligatoria):
@@ -1195,12 +1202,65 @@ Devuelve la respuesta EXACTAMENTE con los siguientes encabezados y reglas:
 ${partials}
 --- FIN ---`;
 }
+// Prompt de una etapa de la consolidación jerárquica.
+function partialConsolPrompt(group,i,total){
+  const partials=group.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
+  return `Eres un jurista experto en sistematización doctrinal. Esta es la ETAPA ${i} de ${total} de una consolidación por partes de una obra jurídica extensa (los parciales no caben en un solo mensaje). Integra los resúmenes de abajo en una CONSOLIDACIÓN PARCIAL, conservando TODA la especificidad: artículos, incisos, plazos, montos, requisitos, definiciones textuales, autores y sentencias con su numeración exacta. Prohibido el lenguaje vago. No inventes datos. Usa toda la capacidad útil de salida; si tu interfaz lo permite, entrega como ARTEFACTO/CANVAS.
+
+Devuelve EXACTAMENTE con estos encabezados:
+
+## CONSOLIDACION PARCIAL ${i}
+(desarrollo por capítulos/bloques, específico y autosuficiente; no comprimas)
+
+## CONCEPTOS DE ESTA PARTE
+- (uno por línea)
+
+## PALABRAS CLAVE DE ESTA PARTE
+(separadas por comas)
+
+--- RESÚMENES PARCIALES (bloques ${group[0].index}–${group[group.length-1].index}) ---
+${partials}
+--- FIN ---`;
+}
+// Prompt principal a copiar: único (single) o fusión de etapas (hierarchical).
+function consolPromptForCopy(){
+  const plan=consolidationPlan(P.blocks,CONSOL_BUDGET);
+  if(plan.mode==='single')return consolidationPrompt();
+  const parts=plan.groups.map((g,i)=>`== Consolidación parcial ${i+1} (bloques ${g[0].index}–${g[g.length-1].index}) ==\n${((P.consolPartials||[])[i]||'(pendiente)').trim()}`).join('\n\n');
+  return consolidationPrompt(parts);
+}
 function renderConsolidation(){
-  $('#consolOut').textContent=consolidationPrompt();
+  const plan=consolidationPlan(P.blocks,CONSOL_BUDGET);
+  const wrap=$('#consolStages');wrap.innerHTML='';
+  if(plan.mode==='hierarchical'){
+    if(!Array.isArray(P.consolPartials))P.consolPartials=[];
+    if(P.consolPartials.length!==plan.groups.length)
+      P.consolPartials=plan.groups.map((_,i)=>P.consolPartials[i]||'');
+    wrap.append(el('p',{class:'help'},
+      `Los resúmenes parciales suman ${plan.total.toLocaleString('es')} caracteres: demasiado para un solo prompt. `+
+      `Consolide primero en ${plan.groups.length} etapas (copie cada prompt, pegue su resultado) y al final use el prompt de fusión.`));
+    plan.groups.forEach((g,i)=>{
+      const done=!!(P.consolPartials[i]||'').trim();
+      const pill=el('span',{class:'pill '+(done?'done':'pend')},done?'✓ lista':'pendiente');
+      const ta=el('textarea',{style:'min-height:110px'});ta.value=P.consolPartials[i]||'';
+      ta.addEventListener('input',()=>{P.consolPartials[i]=ta.value;touch();
+        const ok=!!ta.value.trim();pill.className='pill '+(ok?'done':'pend');pill.textContent=ok?'✓ lista':'pendiente';});
+      wrap.append(el('details',{},
+        el('summary',{},`Etapa ${i+1} · bloques ${g[0].index}–${g[g.length-1].index} `,pill),
+        el('div',{class:'row',style:'margin:8px 0'},
+          el('button',{class:'ghost copybtn',onclick:async()=>{
+            await copy(partialConsolPrompt(g,i+1,plan.groups.length));toast(`Prompt de la etapa ${i+1} copiado`);}},
+            `Copiar prompt etapa ${i+1}`)),
+        el('label',{class:'fld'},`Pegue aquí la consolidación parcial ${i+1}`),ta));
+    });
+  }
+  $('#btnCopyConsol').textContent=plan.mode==='hierarchical'
+    ?'Copiar prompt de fusión final':'Copiar prompt de consolidación';
+  $('#consolOut').textContent=consolPromptForCopy();
   $('#consolResponse').value=P.consolResponse||'';
 }
 $('#consolResponse').addEventListener('input',e=>{P.consolResponse=e.target.value;touch();});
-$('#btnCopyConsol').addEventListener('click',async()=>{await copy(consolidationPrompt());
+$('#btnCopyConsol').addEventListener('click',async()=>{await copy(consolPromptForCopy());
   $('#consolCopied').classList.remove('hidden');setTimeout(()=>$('#consolCopied').classList.add('hidden'),1500);
   toast('Prompt de consolidación copiado');});
 $('#btnParseConsol').addEventListener('click',()=>{
@@ -1575,15 +1635,25 @@ function bm25Search(passages,query,k=5){
   }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,k);
 }
 // Agrupa bloques consecutivos en lotes bajo un presupuesto de caracteres.
-function groupIntoLotes(blocks,maxChars=24000){
+// lenOf permite medir por otro campo (p. ej. la respuesta en vez del texto).
+function groupIntoLotes(blocks,maxChars=24000,lenOf){
+  lenOf=lenOf||function(b){return (b.text||'').length;};
   const lotes=[];let cur=[],len=0;
   for(const b of blocks){
-    const bl=(b.text||'').length;
+    const bl=lenOf(b);
     if(cur.length && len+bl>maxChars){lotes.push(cur);cur=[];len=0;}
     cur.push(b);len+=bl;
   }
   if(cur.length)lotes.push(cur);
   return lotes;
+}
+// Plan de consolidación: si las respuestas parciales caben en un solo prompt,
+// modo 'single'; si no, consolidación jerárquica por etapas (grupos) + fusión.
+function consolidationPlan(blocks,maxChars){
+  const respLen=function(b){return (b.response||'').length;};
+  const total=blocks.reduce((s,b)=>s+respLen(b),0);
+  if(total<=maxChars)return {mode:'single',total,groups:[blocks.slice()]};
+  return {mode:'hierarchical',total,groups:groupIntoLotes(blocks,maxChars,respLen)};
 }
 // Grafo de co-ocurrencia: conceptos que aparecen en el mismo párrafo.
 function buildConceptGraph(concepts,text,minWeight=1){

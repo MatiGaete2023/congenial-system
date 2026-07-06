@@ -41,11 +41,12 @@ const pieces = [
   grabFn('parseFicha'), grabFn('cleanText'), grabFn('detectChapters'),
   grabFn('rebuildIndex'), grabFn('zipStore'),
   grabFn('tokenize'), grabFn('splitPassages'), grabFn('bm25Search'),
-  grabFn('groupIntoLotes'), grabFn('buildConceptGraph'), grabFn('graphToSvg'),
+  grabFn('groupIntoLotes'), grabFn('consolidationPlan'),
+  grabFn('buildConceptGraph'), grabFn('graphToSvg'),
   grabFn('fragmentContent'), grabFn('consolidationPrompt'),
 ];
 const factory = new Function(pieces.join('\n') +
-  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,buildConceptGraph,graphToSvg,fragmentContent,consolidationPrompt};');
+  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,consolidationPlan,buildConceptGraph,graphToSvg,fragmentContent,consolidationPrompt};');
 const A = factory();
 
 // --- mini framework ---
@@ -195,6 +196,19 @@ ok(/EXTENSIÓN MÁXIMA DE CONSOLIDACIÓN/.test(CP), 'consolidación tiene regla 
 ok(/ARTEFACTO \(Claude\) o CANVAS \(ChatGPT\)/.test(CP), 'consolidación pide artefacto/canvas');
 ok(/No conviertas respuestas parciales largas en un resumen corto/.test(CP), 'consolidación evita acortar parciales largos');
 ok(/CONTINUAR PARA COMPLETAR/.test(CP), 'consolidación indica continuación si no cabe todo');
+
+// --- 17. consolidationPlan: single vs jerárquico ---
+const bigBlocks = Array.from({length:40},(_,i)=>({index:i+1,chapter:'C'+(i+1),text:'',response:'r'.repeat(3000)}));
+const planH = A.consolidationPlan(bigBlocks, 30000);
+eq(planH.mode, 'hierarchical', 'plan jerárquico cuando los parciales exceden el presupuesto');
+eq(planH.groups.length, 4, 'plan jerárquico agrupa 40×3000 bajo 30000 en 4 etapas');
+eq(planH.groups.map(g=>g.length), [10,10,10,10], 'etapas de 10 bloques');
+const planS = A.consolidationPlan(bigBlocks.slice(0,5), 30000);
+eq(planS.mode, 'single', 'plan single cuando los parciales caben');
+eq(planS.groups.length, 1, 'single = 1 grupo');
+// groupIntoLotes con medidor alternativo (lenOf)
+eq(A.groupIntoLotes([{text:'x'.repeat(999),response:'ab'},{text:'',response:'cd'}], 3, b=>b.response.length)
+  .map(l=>l.length), [1,1], 'groupIntoLotes respeta lenOf (mide response, no text)');
 
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);
