@@ -365,6 +365,9 @@ footer{text-align:center;padding:20px;font-size:.8rem;color:#888;background:#fff
 </ul>
 
 <div class="callout danger"><strong>Nota importante:</strong> el modo material sensible <em>bloquea los prompts</em>, no cifra el proyecto. El archivo <code>_proyecto.json</code> exportado contiene el texto completo en texto plano. Trátelo con las mismas precauciones que el documento original.</div>
+
+<h3>Material sensible y guardado automático</h3>
+<p>RJA guarda automáticamente un borrador del proyecto en el almacenamiento local del navegador (ver FAQ). <strong>Al activar el modo material sensible, ese borrador se elimina y el autoguardado se desactiva</strong>: el texto del documento no queda en disco. Como contrapartida, si cierra la pestaña con modo sensible activo perderá el trabajo no exportado — el navegador se lo advertirá antes de cerrar. Exporte el <code>_proyecto.json</code> manualmente si necesita pausar.</p>
 </section>
 
 <hr class="section-sep">
@@ -447,7 +450,10 @@ footer{text-align:center;padding:20px;font-size:.8rem;color:#888;background:#fff
 <p>8 000 caracteres funciona bien para Claude 3 Haiku y GPT-3.5. Para Claude 3.5 Sonnet, Claude 3 Opus o GPT-4o puede aumentar a 20 000–40 000 caracteres y procesar menos bloques con más contexto cada uno.</p>
 
 <h4>¿Puedo reanudar un trabajo guardado?</h4>
-<p>Sí. Exporte el "Proyecto .json" en cualquier momento desde el paso 9 o el paso 10. Para reabrirlo, pulse "Cargar proyecto (.json)" en el paso 1.</p>
+<p>Sí, de dos formas. (1) <strong>Automática:</strong> RJA guarda un borrador en el almacenamiento local del navegador cada pocos segundos; al reabrir la página aparece un banner "Hay una sesión anterior guardada" con botones Restaurar/Descartar. (2) <strong>Manual:</strong> exporte el "Proyecto .json" desde el paso 9 o 10 y reábralo con "Cargar proyecto (.json)" en el paso 1. El borrador automático se elimina con "Nuevo proyecto", con "Borrar datos locales" o al activar el modo material sensible.</p>
+
+<h4>¿Dónde se guarda el borrador automático? ¿Es privado?</h4>
+<p>En el <code>localStorage</code> del navegador, solo en su equipo — nunca viaja por la red. Cualquier persona con acceso a su sesión de navegador podría leerlo, por eso el modo material sensible lo desactiva y purga. El límite es ~5 MB: si el proyecto lo supera, RJA le avisará para que exporte el .json manualmente.</p>
 
 <h4>¿Por qué el dossier Word tiene un índice que dice "actualice con clic derecho"?</h4>
 <p>El TOC (tabla de contenidos) se genera con un campo de Word que se actualiza automáticamente. Al abrir el archivo en Word, pulse <kbd>Ctrl+A</kbd> para seleccionar todo y luego <kbd>F9</kbd> para actualizar todos los campos, incluyendo el índice.</p>

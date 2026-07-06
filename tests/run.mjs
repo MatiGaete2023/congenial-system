@@ -50,6 +50,7 @@ const {
   parseConsolidation, reassembleParts, bm25Search,
   CONSOL_BATCH_THRESHOLD, buildBatchConsolPrompts,
   normalizeProject, yamlSafe, bm25ResultHtml,
+  persistDraft, clearDraft, DRAFT_KEY,
 } = globalThis;
 
 // ── Test harness ────────────────────────────────────────────────────────────
@@ -948,6 +949,58 @@ test('T-72 exportadores no lanzan con products sin ficha', () => {
   const xml = buildDocxXml();   // no debe lanzar
   includes(xml, '<w:document', 'docx xml generado con defensas');
   globalThis.P.products = null;
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-73  persistDraft NO persiste con material sensible (privacidad, R-5)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-73 persistDraft no escribe con sensitive=true y purga el existente', () => {
+  const store = {};
+  globalThis.localStorage = {
+    setItem: (k, v) => { store[k] = v; },
+    getItem: (k) => store[k] ?? null,
+    removeItem: (k) => { delete store[k]; },
+  };
+  try {
+    globalThis.P.sensitive = false;
+    globalThis.P.rawText = 'texto de prueba';
+    persistDraft();
+    assert(store[DRAFT_KEY], 'sin sensible: debe escribir el borrador');
+    globalThis.P.sensitive = true;
+    persistDraft();
+    assert(!store[DRAFT_KEY], 'con sensible: debe purgar el borrador');
+  } finally {
+    globalThis.P.sensitive = false;
+    delete globalThis.localStorage;
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-74  persistDraft escribe un JSON restaurable vía normalizeProject
+// ════════════════════════════════════════════════════════════════════════════
+test('T-74 borrador persistido es restaurable', () => {
+  const store = {};
+  globalThis.localStorage = {
+    setItem: (k, v) => { store[k] = v; },
+    getItem: (k) => store[k] ?? null,
+    removeItem: (k) => { delete store[k]; },
+  };
+  try {
+    globalThis.P.sensitive = false;
+    globalThis.P.rawText = 'contenido restaurable';
+    globalThis.P.blocks = [{ index: 1, chapter: 'Cap', text: 'x', response: 'r', excluded: false }];
+    persistDraft();
+    const np = normalizeProject(JSON.parse(store[DRAFT_KEY]));
+    eq(np.rawText, 'contenido restaurable', 'rawText restaurado');
+    eq(np.blocks.length, 1, 'bloques restaurados');
+    eq(np.blocks[0].response, 'r', 'respuesta restaurada');
+    clearDraft();
+    assert(!store[DRAFT_KEY], 'clearDraft purga la clave');
+  } finally {
+    globalThis.P.blocks = [];
+    globalThis.P.rawText = '';
+    delete globalThis.localStorage;
+  }
 });
 
 // ── Run ─────────────────────────────────────────────────────────────────────

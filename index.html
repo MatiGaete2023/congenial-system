@@ -86,6 +86,11 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   <button data-step="10">⚙ Local</button>
 </nav>
 <div id="sensitiveBanner">🔒 Modo Material Sensible activo — copiar texto a IA externa está bloqueado. Solo herramientas locales disponibles.</div>
+<div id="draftBanner" style="display:none;background:#fff8e1;border-bottom:1px solid #e6d9a8;padding:8px 20px;font-size:.85rem">
+  💾 Hay una sesión anterior guardada (<span id="draftDate"></span>).
+  <button id="btnRestoreDraft" style="margin-left:8px;padding:4px 12px">Restaurar</button>
+  <button id="btnDiscardDraft" class="secondary" style="padding:4px 12px">Descartar</button>
+</div>
 <main>
 <!-- STEP 1 -->
 <section id="step1" class="step active">
@@ -100,6 +105,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     <button id="btnLoadProject" class="secondary">Cargar proyecto (.json)</button>
     <input type="file" id="projectFileInput" accept=".json" style="display:none">
     <button id="btnVendorInfo" class="secondary">Info librerías offline</button>
+    <button id="btnClearLocal" class="secondary" title="Elimina el borrador guardado automáticamente en este navegador">Borrar datos locales</button>
   </div>
   <div id="vendorInfoPanel" style="display:none" class="info-box">
     <strong>Librerías para extracción PDF/DOCX/OCR (opcionales):</strong><br>
@@ -324,7 +330,32 @@ function blankProject(){
 let P=blankProject();
 let current=1;
 
-function touch(){P._modified=Date.now();}
+// ── Autosave a localStorage (H-05) ──────────────────────────────────────────
+// Regla de privacidad: con material sensible activo NO se persiste nada y se
+// purga cualquier borrador existente (el texto no debe quedar en disco).
+const DRAFT_KEY='rja_draft_v1';
+let _persistT=null,_quotaWarned=false,_lastPersist=0;
+function persistDraft(){
+  if(typeof localStorage==='undefined')return;
+  try{
+    if(P.sensitive){localStorage.removeItem(DRAFT_KEY);return;}
+    localStorage.setItem(DRAFT_KEY,JSON.stringify(P));
+    _lastPersist=Date.now();
+  }catch(err){
+    if(!_quotaWarned){_quotaWarned=true;
+      if(typeof toast==='function')toast('Aviso: el proyecto es demasiado grande para el guardado automático. Exporte el .json manualmente.',6000);}
+  }
+}
+function schedulePersist(){
+  if(typeof localStorage==='undefined')return;
+  clearTimeout(_persistT);
+  _persistT=setTimeout(persistDraft,2000);
+}
+function clearDraft(){
+  if(typeof localStorage!=='undefined')try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
+}
+
+function touch(){P._modified=Date.now();schedulePersist();}
 
 // Normaliza un proyecto cargado (.json) contra la forma de blankProject():
 // evita fallos cuando el archivo es antiguo, parcial o editado a mano.
@@ -1254,7 +1285,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   document.getElementById('btnNewProject')?.addEventListener('click',()=>{
     if(!confirm('¿Borrar proyecto actual y comenzar de nuevo?'))return;
-    P=blankProject();touch();
+    P=blankProject();clearDraft();touch();
     document.getElementById('fileInfo').innerHTML='';
     document.getElementById('fileInput').value='';
     ['rawTextArea','cleanTextArea','consolResponseArea','bulkResp'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -1491,9 +1522,46 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // Sensitive mode toggle
   document.getElementById('chkSensitive')?.addEventListener('change',e=>{
-    P.sensitive=e.target.checked;touch();
+    P.sensitive=e.target.checked;
+    if(P.sensitive)clearDraft();   // privacidad: purgar borrador persistido
+    touch();
     updateSensitiveUI();
     toast(P.sensitive?'Material sensible ON: prompts/RAG/consolidación a IA bloqueados':'Material sensible OFF');
+  });
+
+  // Autosave: restauración de borrador + limpieza manual + aviso al salir
+  document.getElementById('btnClearLocal')?.addEventListener('click',()=>{
+    clearDraft();
+    document.getElementById('draftBanner').style.display='none';
+    toast('Datos locales eliminados.');
+  });
+  try{
+    const draft=typeof localStorage!=='undefined'&&localStorage.getItem(DRAFT_KEY);
+    if(draft){
+      const obj=JSON.parse(draft);
+      if(obj&&(obj.rawText||obj.cleanText||(obj.blocks&&obj.blocks.length))){
+        const banner=document.getElementById('draftBanner');
+        document.getElementById('draftDate').textContent=
+          obj._modified?new Date(obj._modified).toLocaleString('es'):'fecha desconocida';
+        banner.style.display='';
+        document.getElementById('btnRestoreDraft')?.addEventListener('click',()=>{
+          P=normalizeProject(obj);
+          updateSensitiveUI();loadMetaForm();refreshNav();
+          banner.style.display='none';
+          gotoStep(canEnterStep(9)?9:canEnterStep(6)?6:canEnterStep(3)?3:1);
+          toast('Sesión anterior restaurada.');
+        });
+        document.getElementById('btnDiscardDraft')?.addEventListener('click',()=>{
+          clearDraft();banner.style.display='none';toast('Borrador descartado.');
+        });
+      }
+    }
+  }catch(e){/* borrador ilegible: ignorar */}
+  window.addEventListener('beforeunload',e=>{
+    // Avisar si hay trabajo sin persistir (siempre en modo sensible, donde no hay autosave)
+    if((P.rawText||P.blocks.length)&&P._modified>_lastPersist){
+      e.preventDefault();e.returnValue='';
+    }
   });
 
   // Sync meta form on input
@@ -1511,6 +1579,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 if(typeof window==='undefined'){
   Object.assign(globalThis,{
     P,blankProject,normalizeProject,touch,safeName,xmlEsc,yamlSafe,bm25ResultHtml,
+    persistDraft,clearDraft,DRAFT_KEY,
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,
