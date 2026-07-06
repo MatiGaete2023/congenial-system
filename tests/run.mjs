@@ -1132,5 +1132,18 @@ test('T-84 ZIP lleva flag UTF-8 (bit 11) y fecha DOS 2024-01-01', async () => {
   eq(b[13], 0x58, 'fecha MSB (2024-01-01)');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-85  decodeTextSmart rescata archivos Latin-1/windows-1252 (H-16)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-85 decodeTextSmart decodifica Latin-1 sin corromper acentos', () => {
+  const { decodeTextSmart } = globalThis;
+  // "artículo" en Latin-1: í = 0xED (inválido como UTF-8)
+  const latin1 = new Uint8Array([0x61, 0x72, 0x74, 0xED, 0x63, 0x75, 0x6C, 0x6F]);
+  eq(decodeTextSmart(latin1.buffer), 'artículo', 'Latin-1 rescatado');
+  // UTF-8 válido pasa sin cambios
+  const utf8 = new TextEncoder().encode('artículo ñandú');
+  eq(decodeTextSmart(utf8.buffer), 'artículo ñandú', 'UTF-8 intacto');
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

@@ -129,16 +129,21 @@ TXT, MD y el pegado directo de texto funcionan sin ninguna librería.
 ## Desarrollo y tests
 
 ```bash
-npm test   # → 67 OK / 0 fallidas
+npm test   # → 85 OK / 0 fallidas
 ```
 
-Los tests cubren: ZIP (CRC32, MIME, binario), DOCX (estilos, TOC, Markdown→Word),
-limpieza de texto, detección de capítulos (decimal, romano, TODO-MAYÚSCULAS),
-segmentación, pegado masivo, validación heurística de respuestas, modo sensible,
-exportaciones, navegación de pasos, XSS-escape de contenido de usuario,
-guard de prompts en modo sensible, consolidación por lotes, paquete local sin productos,
-editor de estructura de bloques (excluir/renombrar), preservación de subtítulos internos
-del resumen maestro y carga robusta de proyectos `.json` parciales o corruptos.
+Los tests cubren: ZIP (CRC32, MIME, binario, flag UTF-8, fecha DOS), DOCX (estilos,
+TOC, Markdown→Word), limpieza de texto, detección de capítulos (decimal, romano,
+TODO-MAYÚSCULAS) con fusión anti-sobre-segmentación, segmentación, pegado masivo,
+validación de respuestas alineada al objetivo 20–50 %, modo sensible, exportaciones,
+navegación de pasos, escape XSS (contenido, atributos, YAML), guard de prompts en
+modo sensible, consolidación por lotes, paquete local sin productos, editor de
+estructura de bloques (excluir/renombrar), preservación de subtítulos internos del
+resumen maestro, carga robusta de proyectos `.json` parciales o corruptos,
+autoguardado con política de privacidad (sin persistencia en modo sensible),
+worker PDF local, decodificación Latin-1 de TXT y "siguiente prompt pendiente".
+
+CI: GitHub Actions ejecuta `npm test` en cada push y pull request.
 
 ---
 

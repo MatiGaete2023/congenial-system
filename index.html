@@ -1175,10 +1175,21 @@ async function extractDocx(file){
   const{value}=await mammoth.extractRawText({arrayBuffer:ab});
   return value;
 }
+// Decodifica texto probando UTF-8 y, si hay caracteres de reemplazo (U+FFFD),
+// reintenta como windows-1252 (archivos Latin-1 antiguos) quedándose con la
+// versión menos corrupta (H-16).
+function decodeTextSmart(ab){
+  const utf8=new TextDecoder('utf-8').decode(ab);
+  const bad=(utf8.match(/�/g)||[]).length;
+  if(!bad)return utf8;
+  try{
+    const cp1252=new TextDecoder('windows-1252').decode(ab);
+    const badCp=(cp1252.match(/�/g)||[]).length;
+    return badCp<bad?cp1252:utf8;
+  }catch(e){return utf8;}
+}
 async function extractTxt(file){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(file,'utf-8');
-  });
+  return decodeTextSmart(await file.arrayBuffer());
 }
 
 // ============================================================
@@ -1697,7 +1708,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 if(typeof window==='undefined'){
   Object.assign(globalThis,{
     P,blankProject,normalizeProject,touch,safeName,xmlEsc,yamlSafe,bm25ResultHtml,
-    persistDraft,clearDraft,DRAFT_KEY,ensurePdfWorker,VENDOR,
+    persistDraft,clearDraft,DRAFT_KEY,ensurePdfWorker,VENDOR,decodeTextSmart,
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,
