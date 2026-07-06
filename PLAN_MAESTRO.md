@@ -42,7 +42,7 @@ desde CDN o desde `vendor/` local. Tests de funciones puras en `tests/run.mjs`
 
 | ID | Severidad | Ubicación (aprox.) | Defecto |
 |----|-----------|--------------------|---------|
-| A1 | **Alta** | `loadFile()` ~L531; `loadProject()` ~L1787 | **XSS por `innerHTML`**: `file.name` / `P.fileName` se interpolan sin escapar. Vector real: un `.json` de proyecto importado con `fileName` malicioso ejecuta script con acceso a IndexedDB (todos los proyectos). |
+| A1 | ~~Alta~~ **RESUELTO** | `loadFile()`; `loadProject()` | **XSS por `innerHTML`** con `file.name`/`P.fileName` sin escapar. **Corregido en el commit `4c80bb2`** (ambas ocurrencias usan ya `replaceChildren`+`el()`). El único `innerHTML` con plantilla restante (`#structInfo`) interpola solo números — seguro. No rehacer. |
 | A2 | **Alta** | `loadFile()` ~L527 | Al cargar un archivo nuevo se resetean `rawText/cleanText/blocks` pero **no** `consolResponse` ni `products`. El proyecto queda en estado incoherente: productos del documento anterior accesibles/exportables con el nombre del nuevo. |
 | A3 | Media | `segment()` ~L833 | Re-segmentar (p. ej. cambiar tamaño de bloque) **descarta silenciosamente** respuestas ya pegadas cuando el capítulo no coincide por índice. Horas de trabajo perdidas sin aviso. |
 | A4 | Media | `loadScript()` ~L572 | Dedupe compara `s.src` (URL absoluta) contra rutas relativas: en modo `vendor/` **nunca coincide** y cada extracción re-inyecta el `<script>` de la librería. |
@@ -79,12 +79,9 @@ ya lo cubre), migrar el grafo a librería (contradice regla 1), modo multi-archi
 
 Cada tarea = un ciclo AUTOLOOP = un commit. Formato: objetivo / cambio / criterios de aceptación (CA).
 
-### T1 — Eliminar XSS de nombre de archivo (A1) · impacto alto, esfuerzo bajo
-- **Cambio**: en `loadFile()` y `loadProject()`, reemplazar las dos asignaciones
-  `innerHTML` con plantilla por construcción DOM con el helper `el()` existente
-  (texto via `document.createTextNode`, ya lo hace `el`).
-- **CA**: importar un `.json` cuyo `fileName` sea `<img src=x onerror=alert(1)>.txt`
-  muestra el nombre literal y no ejecuta nada. Tests en verde.
+### T1 — ~~Eliminar XSS de nombre de archivo (A1)~~ · YA RESUELTA (commit `4c80bb2`)
+- No ejecutar. Verificación opcional: importar un `.json` cuyo `fileName` sea
+  `<img src=x onerror=alert(1)>.txt` debe mostrar el nombre literal sin ejecutar nada.
 
 ### T2 — Resetear estado derivado al cargar archivo nuevo (A2) · impacto alto, esfuerzo bajo
 - **Cambio**: en `loadFile()`, añadir `P.consolResponse=''; P.products=null;` junto al
@@ -180,7 +177,12 @@ Cada tarea = un ciclo AUTOLOOP = un commit. Formato: objetivo / cambio / criteri
 
 ## 5. Criterios de cierre global
 
-- Los 30 tests previos + los nuevos (T5, T6, T7, T9, T10 añaden ≥5) en verde en CI.
+- Los 37 tests previos + los nuevos (T5, T6, T7, T9, T10 añaden ≥5) en verde en CI.
+- Nota de contexto: el commit paralelo `4c80bb2` («reforzar consolidacion exhaustiva»)
+  cambió el detalle por defecto a **Exhaustivo**, renumeró las reglas del prompt
+  (7 = concreción, 8 = citas textuales) y añadió el bloque «EXTENSIÓN MÁXIMA» a la
+  consolidación. Cualquier tarea que toque prompts debe partir de ese estado, no del
+  descrito en documentación anterior.
 - Ninguna regla de la sección 1 violada (verificar especialmente 1, 3 y 4).
 - `CHANGELOG.md` refleja cada tarea cerrada.
 - Un commit por tarea; mensaje: `fix:`/`feat:`/`test:`/`docs:` + descripción en español.
