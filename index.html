@@ -1658,13 +1658,17 @@ function consolidationPlan(blocks,maxChars){
 // Grafo de co-ocurrencia: conceptos que aparecen en el mismo párrafo.
 function buildConceptGraph(concepts,text,minWeight=1){
   const nodes=(concepts||[]).map(c=>String(c).trim()).filter(Boolean);
-  const keys=nodes.map(n=>stripAccents(n).toLowerCase());
+  // frontera de palabra: evita falsos positivos por subcadena ("acción" en "transacción")
+  const keys=nodes.map(n=>{
+    const k=stripAccents(n).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return k?new RegExp('(^|[^a-z0-9ñ])'+k+'([^a-z0-9ñ]|$)'):null;
+  });
   const counts=nodes.map(()=>0);
   const pairs=new Map();
   for(const para of String(text||'').split(/\n+/)){
     const low=stripAccents(para).toLowerCase();
     const present=[];
-    for(let i=0;i<keys.length;i++)if(keys[i] && low.includes(keys[i])){present.push(i);counts[i]++;}
+    for(let i=0;i<keys.length;i++)if(keys[i] && keys[i].test(low)){present.push(i);counts[i]++;}
     for(let a=0;a<present.length;a++)for(let c=a+1;c<present.length;c++){
       const key=present[a]+'-'+present[c];
       pairs.set(key,(pairs.get(key)||0)+1);

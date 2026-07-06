@@ -181,6 +181,8 @@ eq(A.groupIntoLotes(LB, 15).map(l=>l.map(b=>b.index)), [[1],[2,3]], 'groupIntoLo
 const G = A.buildConceptGraph(['prescripción','acción','recurso'],
   'La prescripción y la acción civil.\nEl recurso de casación.', 1);
 eq(G.edges, [{a:0,b:1,w:1}], 'buildConceptGraph co-ocurrencia');
+const G2 = A.buildConceptGraph(['acción','pago'], 'La transacción implica un pago.\nLa acción y el pago.', 1);
+eq(G2.nodes[0].count, 1, 'buildConceptGraph exige frontera de palabra (acción ≠ transacción)');
 ok(/^<svg/.test(A.graphToSvg(G)) && /prescripci/.test(A.graphToSvg(G)), 'graphToSvg renderiza nodos');
 
 // --- 14. fragmentContent: cabecera txt/md + texto ---
