@@ -1118,5 +1118,19 @@ test('T-83 nextPendingBlock → null cuando todo está respondido', () => {
   globalThis.P.blocks = [];
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-84  ZIP con flag EFS (UTF-8) y fecha DOS válida (H-14)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-84 ZIP lleva flag UTF-8 (bit 11) y fecha DOS 2024-01-01', async () => {
+  const blob = zipStore({ 'a.txt': 'hola' });
+  const b = await blobBytes(blob);
+  // local header: offset 6-7 = flags (0x0800 LE → 00 08)
+  eq(b[6], 0x00, 'flags LSB');
+  eq(b[7], 0x08, 'flags MSB (bit 11 EFS)');
+  // offset 12-13 = fecha DOS (0x5821 LE → 21 58)
+  eq(b[12], 0x21, 'fecha LSB');
+  eq(b[13], 0x58, 'fecha MSB (2024-01-01)');
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

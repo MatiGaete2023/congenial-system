@@ -452,11 +452,14 @@ function _crc32(buf){let c=0xFFFFFFFF;for(let i=0;i<buf.length;i++)c=_crcTable[(
 const _u16=n=>[n&0xFF,(n>>8)&0xFF];
 const _u32=n=>[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];
 
+// Flags bit 11 (EFS): nombres en UTF-8. Fecha DOS fija válida (2024-01-01) —
+// con fecha 0 (mes/día 0) algunos descompresores marcan el archivo como inválido.
+const _ZIP_FLAGS=0x0800,_ZIP_DATE=0x5821,_ZIP_TIME=0;
 function _zipFromBytes(items,mime){
   const enc=new TextEncoder();const chunks=[];let offset=0;const central=[];
   for(const[name,data]of items){
     const nameBytes=enc.encode(name);const crc=_crc32(data);
-    const local=[..._u32(0x04034b50),..._u16(20),..._u16(0),..._u16(0),..._u16(0),..._u16(0),
+    const local=[..._u32(0x04034b50),..._u16(20),..._u16(_ZIP_FLAGS),..._u16(0),..._u16(_ZIP_TIME),..._u16(_ZIP_DATE),
       ..._u32(crc),..._u32(data.length),..._u32(data.length),..._u16(nameBytes.length),..._u16(0)];
     chunks.push(new Uint8Array(local),nameBytes,data);
     central.push({name:nameBytes,crc,size:data.length,offset});
@@ -464,7 +467,7 @@ function _zipFromBytes(items,mime){
   }
   const cdStart=offset;const cd=[];
   for(const c of central){
-    const rec=[..._u32(0x02014b50),..._u16(20),..._u16(20),..._u16(0),..._u16(0),..._u16(0),..._u16(0),
+    const rec=[..._u32(0x02014b50),..._u16(20),..._u16(20),..._u16(_ZIP_FLAGS),..._u16(0),..._u16(_ZIP_TIME),..._u16(_ZIP_DATE),
       ..._u32(c.crc),..._u32(c.size),..._u32(c.size),..._u16(c.name.length),..._u16(0),..._u16(0),
       ..._u16(0),..._u16(0),..._u32(0),..._u32(c.offset)];
     cd.push(new Uint8Array(rec),c.name);offset+=rec.length+c.name.length;
