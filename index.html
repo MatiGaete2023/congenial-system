@@ -761,7 +761,7 @@ function cleanText(t){
     return true;
   });
   let out=lines.join('\n');
-  out=out.replace(/-\n(\w)/g,'$1');                  // guiones de corte de palabra
+  out=out.replace(/-\n([a-z0-9áéíóúüñ])/gi,'$1');    // guiones de corte de palabra (incl. acentos/ñ)
   out=out.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').replace(/[ \t]{2,}/g,' ');
   return out.trim();
 }

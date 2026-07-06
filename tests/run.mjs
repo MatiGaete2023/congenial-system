@@ -119,6 +119,8 @@ const dirty = Array.from({length:6}, (_,i)=>`ENCABEZADO REPETIDO\nContenido pág
 const clean = A.cleanText(dirty);
 ok(!/ENCABEZADO REPETIDO/.test(clean), 'cleanText quita encabezado repetido');
 ok(/Contenido página 3/.test(clean), 'cleanText conserva contenido');
+ok(/jurídica/.test(A.cleanText('ju-\nrídica')) && /económico/.test(A.cleanText('eco-\nnómico')),
+  'cleanText une palabras cortadas con guion ante acentos');
 
 // --- 8. zipStore: estructura DOCX + CRC verificables ---
 function crc32(buf){
