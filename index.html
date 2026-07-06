@@ -345,7 +345,23 @@ function normalizeProject(obj){
     response:(b&&typeof b.response==='string')?b.response:'',
     excluded:!!(b&&b.excluded),
   }));
-  base.products=(obj.products&&typeof obj.products==='object')?obj.products:null;
+  // products: normalización estricta — un objeto parcial (p.ej. {}) provocaba
+  // TypeError en buildDocxXml/buildMarkdown al exportar (f.title sobre undefined).
+  if(obj.products&&typeof obj.products==='object'){
+    const p=obj.products;
+    const strArr=a=>Array.isArray(a)?a.filter(x=>typeof x==='string'):[];
+    const ficha={};
+    for(const k of['title','author','year','publisher','edition','pages','subject','subsubjects'])
+      ficha[k]=(p.ficha&&typeof p.ficha[k]==='string')?p.ficha[k]:'';
+    base.products={
+      ficha,
+      synthLines:strArr(p.synthLines),
+      indexItems:strArr(p.indexItems),
+      master:typeof p.master==='string'?p.master:'',
+      concepts:strArr(p.concepts),
+      keywords:strArr(p.keywords),
+    };
+  }else base.products=null;
   return base;
 }
 
@@ -480,7 +496,7 @@ function tocField(){
 }
 
 function buildDocxXml(){
-  const pr=P.products,f=pr.ficha;const B=[];
+  const pr=P.products||{};const f=pr.ficha||{};const B=[];
   B.push(`<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="1200" w:after="240"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="44"/></w:rPr><w:t xml:space="preserve">${xmlEsc(f.title||P.meta.title||'Documento jurídico')}</w:t></w:r></w:p>`);
   if(f.author)B.push(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="26"/></w:rPr><w:t xml:space="preserve">${xmlEsc(f.author)}</w:t></w:r></w:p>`);
   B.push(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`);
@@ -758,7 +774,7 @@ function blockPrompt(b){
 // ============================================================
 function buildMarkdown(){
   const pr=P.products;if(!pr)return'';
-  const f=pr.ficha;
+  const f=pr.ficha||{};
   const L=[`# ${f.title||P.meta.title||'Documento jurídico'}`,
     f.author?`*${f.author}*`:'','',
     '## Ficha bibliográfica',''];
@@ -777,7 +793,7 @@ function buildMarkdown(){
 
 function buildObsidian(){
   const pr=P.products;if(!pr)return'';
-  const f=pr.ficha;
+  const f=pr.ficha||{};
   const yaml=['---',
     `title: "${yamlSafe(f.title||P.meta.title||'')}"`,
     `author: "${yamlSafe(f.author||P.meta.author||'')}"`,

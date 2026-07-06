@@ -921,5 +921,34 @@ test('T-70 buildObsidian sanea comillas dobles en YAML', () => {
   notIncludes(titleLine, '&quot;', 'sin entidades XML en YAML');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-71  normalizeProject normaliza products parcial ({} → estructura completa)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-71 normalizeProject completa products parcial', () => {
+  const np = normalizeProject({ products: {} });
+  assert(np.products !== null, 'objeto vacío se normaliza, no se anula');
+  assert(np.products.ficha && typeof np.products.ficha.title === 'string', 'ficha.title string');
+  assert(Array.isArray(np.products.synthLines), 'synthLines array');
+  assert(Array.isArray(np.products.keywords), 'keywords array');
+  eq(np.products.master, '', 'master string vacío');
+  // arrays con basura → solo strings
+  const np2 = normalizeProject({ products: { synthLines: ['ok', 42, null, 'bien'] } });
+  eq(np2.products.synthLines.length, 2, 'filtra elementos no-string');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-72  buildMarkdown/buildDocxXml no lanzan con products malformado (H-04)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-72 exportadores no lanzan con products sin ficha', () => {
+  globalThis.P.blocks = [];
+  globalThis.P.meta = { title: 'T', author: '', year: '', publisher: '', edition: '', pages: '', subject: '', subsubjects: '', juris: '' };
+  globalThis.P.products = {};   // simula un .json corrupto cargado sin normalizar
+  const md = buildMarkdown();   // no debe lanzar
+  includes(md, 'Ficha bibliográfica', 'markdown generado con defensas');
+  const xml = buildDocxXml();   // no debe lanzar
+  includes(xml, '<w:document', 'docx xml generado con defensas');
+  globalThis.P.products = null;
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();
