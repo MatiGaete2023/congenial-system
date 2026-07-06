@@ -1048,5 +1048,28 @@ test('T-77 índices consecutivos tras fusión', () => {
   blocks.forEach((b, i) => eq(b.index, i + 1, `index ${i + 1} consecutivo`));
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-78  buildPackageZip excluye bloques excluidos de _prompts.md (H-09)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-78 _prompts.md del paquete omite bloques excluidos', async () => {
+  globalThis.P.sensitive = false;
+  globalThis.P.meta = { title: 'Doc', author: '', year: '', publisher: '', edition: '', pages: '', subject: '', subsubjects: '', juris: '' };
+  globalThis.P.products = null;
+  globalThis.P.consolResponse = '';
+  globalThis.P.rawText = 'texto';
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'CAPITULO_INCLUIDO', text: 'a', response: 'r1', excluded: false },
+    { index: 2, chapter: 'CAPITULO_EXCLUIDO', text: 'b', response: 'r2', excluded: true },
+  ];
+  const blob = await globalThis.buildPackageZip();
+  const bytes = await blobBytes(blob);
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  includes(text, 'CAPITULO_INCLUIDO', 'bloque incluido presente en prompts');
+  const promptsSection = text.split('_prompts.md')[1] || '';
+  notIncludes(promptsSection.slice(0, 2000), 'Bloque 2: CAPITULO_EXCLUIDO', 'bloque excluido ausente de _prompts.md');
+  globalThis.P.blocks = [];
+  globalThis.P.rawText = '';
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

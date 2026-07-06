@@ -882,7 +882,8 @@ async function buildPackageZip(){
   }
   if(P.consolResponse?.trim())e[`${base}_consolidado_bruto.md`]=buildRawConsolidationMarkdown();
   if(P.blocks.some(b=>b.response?.trim()))e[`${base}_fragmentos_resumidos.md`]=buildPartialSummariesMarkdown();
-  if(P.blocks.length&&!isSensitive())e[`${base}_prompts.md`]=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
+  const inclBlocks=P.blocks.filter(b=>!b.excluded);
+  if(inclBlocks.length&&!isSensitive())e[`${base}_prompts.md`]=inclBlocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
   e[`${base}_proyecto.json`]=JSON.stringify(P,null,2);
   e['README_EXPORTACION.txt']=[
     'Contenido del paquete RJA:',
@@ -1192,7 +1193,7 @@ function gotoStep(n){
   if(n===6)renderResponses();
   if(n===7){
     const ta=document.getElementById('consolResponseArea');if(ta)ta.value=P.consolResponse||'';
-    const totalChars=P.blocks.reduce((s,b)=>s+(b.response||'').length,0);
+    const totalChars=P.blocks.filter(b=>!b.excluded).reduce((s,b)=>s+(b.response||'').length,0);
     const batchWrap=document.getElementById('batchWrap');
     if(batchWrap){
       const show=totalChars>CONSOL_BATCH_THRESHOLD;
@@ -1487,7 +1488,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnExportPrompts')?.addEventListener('click',()=>{
     if(!P.blocks.length)return toast('No hay bloques');
     if(!sensitiveGuardIA())return;
-    const md=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
+    const md=P.blocks.filter(b=>!b.excluded).map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
     download(safeName()+'_prompts.md',new Blob([md],{type:'text/markdown'}));
   });
 
@@ -1516,7 +1517,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnExportAllPrompts')?.addEventListener('click',()=>{
     if(!P.blocks.length)return toast('No hay bloques');
     if(!sensitiveGuardIA())return;
-    const md=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
+    const md=P.blocks.filter(b=>!b.excluded).map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
     download(safeName()+'_prompts.md',new Blob([md],{type:'text/markdown'}));
   });
   document.getElementById('btnExportJsonLocal')?.addEventListener('click',()=>{
