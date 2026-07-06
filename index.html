@@ -644,13 +644,31 @@ function detectChapters(text){
 
 function sizeOf(s){return String(s).replace(/\[p\.\s*\d+\]/g,'').length;}
 
+// Fusión de bloques minúsculos (H-07): el patrón TODO-MAYÚSCULAS de
+// detectChapters matchea muchas líneas de textos jurídicos (VISTOS, nombres de
+// partes…) y producía decenas de bloques de pocas líneas. Cualquier bloque con
+// menos de MIN_BLOCK_CHARS se fusiona con el anterior (conservando su capítulo).
+const MIN_BLOCK_CHARS=500;
+function _mergeSmallBlocks(blocks,minChars){
+  if(blocks.length<2)return blocks;
+  const out=[blocks[0]];
+  for(let i=1;i<blocks.length;i++){
+    const prev=out[out.length-1],b=blocks[i];
+    if(sizeOf(b.text)<minChars||sizeOf(prev.text)<minChars){
+      prev.text=prev.text+'\n\n'+b.text;
+    }else out.push(b);
+  }
+  out.forEach((b,i)=>{b.index=i+1;});
+  return out;
+}
+
 function segment(text,maxSize){
   maxSize=maxSize||8000;
   const src=String(text||'');
   if(!src.trim())return[];
   const chapters=detectChapters(src);
   if(chapters.length<2){
-    return _splitBySize(src,'Bloque',maxSize,{idxStart:1});
+    return _mergeSmallBlocks(_splitBySize(src,'Bloque',maxSize,{idxStart:1}),MIN_BLOCK_CHARS);
   }
   const blocks=[];let bi=1;
   for(let i=0;i<chapters.length;i++){
@@ -665,7 +683,7 @@ function segment(text,maxSize){
       for(const s of subs){s.index=bi++;blocks.push(s);}
     }
   }
-  return blocks;
+  return _mergeSmallBlocks(blocks,MIN_BLOCK_CHARS);
 }
 function _splitBySize(text,baseName,maxSize,opts){
   const blocks=[];let start=0,si=1,bi=opts.idxStart||1;
@@ -1586,7 +1604,7 @@ if(typeof window==='undefined'){
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,
-    cleanText,cleanTextDetailed,detectChapters,segment,sizeOf,
+    cleanText,cleanTextDetailed,detectChapters,segment,sizeOf,MIN_BLOCK_CHARS,
     blockInstructions,consolidationPrompt,blockPrompt,
     buildMarkdown,buildObsidian,
     buildPartialSummariesMarkdown,buildRawConsolidationMarkdown,buildPackageZip,

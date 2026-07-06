@@ -450,7 +450,9 @@ test('T-34 segment() texto pequeño → 1 bloque', () => {
 // T-35  segment() texto con capítulos → bloques por capítulo
 // ════════════════════════════════════════════════════════════════════════════
 test('T-35 segment() con CAPÍTULO I/II → ≥2 bloques', () => {
-  const text = 'CAPÍTULO I\n' + 'contenido A '.repeat(10) + '\nCAPÍTULO II\n' + 'contenido B '.repeat(10);
+  // Capítulos > MIN_BLOCK_CHARS para que la fusión anti-sobre-segmentación
+  // (TAREA 5 del plan maestro) no los una: valida un bloque por capítulo real.
+  const text = 'CAPÍTULO I\n' + 'contenido A '.repeat(50) + '\nCAPÍTULO II\n' + 'contenido B '.repeat(50);
   const blocks = segment(text, 8000);
   assert(blocks.length >= 2, `≥2 bloques (got ${blocks.length})`);
   assert(blocks[0].chapter.includes('CAPÍTULO'), 'capítulo en nombre de bloque');
@@ -1020,6 +1022,30 @@ test('T-75 ensurePdfWorker asigna worker local si falta workerSrc', () => {
   } finally {
     delete globalThis.pdfjsLib;
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-76  segment() fusiona bloques minúsculos (anti sobre-segmentación, H-07)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-76 segment() fusiona pseudo-capítulos minúsculos', () => {
+  const { MIN_BLOCK_CHARS } = globalThis;
+  // 30 líneas TODO-MAYÚSCULAS con párrafos de ~100 chars: sin fusión serían ~30 bloques
+  const parts = [];
+  for (let i = 0; i < 30; i++) parts.push(`ENCABEZADO NUMERO ${'X'.repeat(5 + (i % 3))}\n` + 'texto del párrafo jurídico. '.repeat(4));
+  const blocks = segment(parts.join('\n'), 8000);
+  assert(blocks.length < 15, `debe fusionar (got ${blocks.length} bloques)`);
+  for (let i = 0; i < blocks.length - 1; i++)
+    assert(sizeOf(blocks[i].text) >= MIN_BLOCK_CHARS, `bloque ${i + 1} ≥ ${MIN_BLOCK_CHARS} chars`);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-77  tras la fusión los índices quedan consecutivos desde 1
+// ════════════════════════════════════════════════════════════════════════════
+test('T-77 índices consecutivos tras fusión', () => {
+  const parts = [];
+  for (let i = 0; i < 10; i++) parts.push(`SECCION BREVE ${'Y'.repeat(4 + i)}\n` + 'contenido corto. '.repeat(3));
+  const blocks = segment(parts.join('\n'), 8000);
+  blocks.forEach((b, i) => eq(b.index, i + 1, `index ${i + 1} consecutivo`));
 });
 
 // ── Run ─────────────────────────────────────────────────────────────────────
