@@ -170,6 +170,12 @@ npm test      # o: node tests/run.mjs
 
 El desarrollo sigue el ciclo controlado descrito en [`AUTOLOOP.md`](AUTOLOOP.md)
 (objetivo → cambio mínimo → prueba → corrección, máx. 3 iteraciones, registro).
+Historial de versiones en [`CHANGELOG.md`](CHANGELOG.md); roadmap de auditoría
+en [`PLAN_MAESTRO.md`](PLAN_MAESTRO.md). Licencia MIT ([`LICENSE`](LICENSE)).
+
+En obras muy extensas, el paso 6 divide la consolidación automáticamente en
+**etapas** (una consolidación parcial por grupo de bloques) más un prompt de
+**fusión final**, para no exceder el límite de entrada del chat.
 
 ## Arquitectura
 
