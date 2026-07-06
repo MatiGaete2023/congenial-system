@@ -68,12 +68,13 @@ button.danger{background:var(--c-danger)}button.danger:hover{background:var(--c-
 details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 .export-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .export-btn-wrap{background:#fff;border:1px solid #dde;border-radius:6px;padding:10px;text-align:center}
-.export-btn-wrap p{font-size:.75rem;color:#666;margin-top:4px}
+.export-btn-wrap p{font-size:.75rem;color:var(--c-text-muted);margin-top:4px}
 .block-struct-row{display:flex;gap:6px;align-items:center;padding:5px 4px;border-bottom:1px solid #eef}
 .block-struct-row input[type=text]{flex:1;font-size:.82rem;padding:4px 6px;border:1px solid #ccc;border-radius:4px}
 .block-struct-row input[type=checkbox]{width:auto;margin:0}
 .block-excluded{opacity:.45}
 .block-highlight{box-shadow:0 0 0 3px var(--c-primary);transition:box-shadow .3s}
+#dropZone.drag-over{border-color:var(--c-primary);background:#eaf3fb}
 .block-excluded .block-header h4::before{content:'[Excluido] ';color:#999;font-weight:normal}
 </style>
 </head>
@@ -106,9 +107,9 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 <!-- STEP 1 -->
 <section id="step1" class="step active">
   <h2>1. Cargar documento</h2>
-  <div class="card">
-    <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp">
-    <p style="margin-top:8px;font-size:.8rem;color:#666">PDF, DOCX, TXT, MD o imagen (OCR experimental)</p>
+  <div class="card" id="dropZone">
+    <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp" aria-label="Seleccionar documento a resumir">
+    <p style="margin-top:8px;font-size:.8rem;color:var(--c-text-muted)">PDF, DOCX, TXT, MD o imagen (OCR experimental) — también puede arrastrar el archivo aquí</p>
     <div id="fileInfo" style="margin-top:10px"></div>
   </div>
   <div class="card">
@@ -125,7 +126,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
       <li>Mammoth.js — extracción de texto DOCX</li>
       <li>Tesseract.js — OCR en imágenes (experimental, offline parcial)</li>
     </ul>
-    <p style="margin-top:6px;font-size:.78rem;color:#666">
+    <p style="margin-top:6px;font-size:.78rem;color:var(--c-text-muted)">
       Por defecto <strong>no se descarga nada</strong> (ejecución 100% local). Para extraer PDF/DOCX/imágenes
       puede cargarlas bajo demanda desde CDN (requiere internet solo en ese momento) o colocar los archivos
       <code>pdf.min.js</code>, <code>pdf.worker.min.js</code>, <code>mammoth.browser.min.js</code>,
@@ -133,7 +134,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
     </p>
     <button id="btnLoadVendor" class="secondary" style="margin-top:6px">Cargar librerías desde CDN (requiere internet)</button>
     <div id="vendorStatus" style="margin-top:6px;font-size:.8rem;color:#555"></div>
-    <p style="margin-top:6px;font-size:.78rem;color:#666">TXT, MD y pegar texto directamente funcionan sin ninguna librería.</p>
+    <p style="margin-top:6px;font-size:.78rem;color:var(--c-text-muted)">TXT, MD y pegar texto directamente funcionan sin ninguna librería.</p>
   </div>
 </section>
 <!-- STEP 2 -->
@@ -245,7 +246,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
         <strong>¿Qué le pedimos a la IA?</strong> El prompt instruye a la IA a usar su máxima capacidad de salida, redactar el Resumen Maestro con entre el 20 % y el 50 % de la extensión del texto fuente, y —si la plataforma lo soporta— generar la respuesta como <strong>Artifact (Claude.ai)</strong> o <strong>Canvas (ChatGPT)</strong> para evitar truncamientos.
       </div>
       <textarea id="consolPromptText" rows="14" readonly style="font-size:.75rem;background:#f9fcff"></textarea>
-      <p style="font-size:.78rem;color:#666;margin-top:4px">↑ Solo las instrucciones. Al copiar el prompt completo se añaden los resúmenes de cada bloque al final.</p>
+      <p style="font-size:.78rem;color:var(--c-text-muted);margin-top:4px">↑ Solo las instrucciones. Al copiar el prompt completo se añaden los resúmenes de cada bloque al final.</p>
     </div>
     <p class="info-box" style="margin-top:8px">Copie el prompt y péguelo en <strong>Claude.ai</strong> (active "Artifact" antes de enviar) o <strong>ChatGPT</strong> (use "Canvas" si está disponible). Obtenga la respuesta y péguela abajo.</p>
     <textarea id="consolResponseArea" rows="12" placeholder="Pega aquí la respuesta de consolidación del modelo"></textarea>
@@ -326,7 +327,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   </div>
 </section>
 </main>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 'use strict';
 
@@ -1290,7 +1291,8 @@ function renderResponses(){
     const excBtn=b.excluded
       ?`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},true);renderResponses()">Incluir</button>`
       :`<button class="secondary" style="font-size:.75rem" onclick="toggleBlockExclude(${b.index},false);renderResponses()">Excluir</button>`;
-    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span>${b.excluded?'<span class="stat-pill" style="background:#ffe0e0">excluido</span>':''}</div>
+    const statusTxt=!b.response?.trim()?'sin respuesta':(statusClass==='ok'?'respuesta válida':'respuesta con avisos');
+    div.innerHTML=`<div class="block-header"><div class="block-status ${statusClass}" role="img" title="${statusTxt}" aria-label="${statusTxt}"></div><h4>Bloque ${b.index}: ${xmlEsc(b.chapter)}</h4><span class="stat-pill">${b.text.length.toLocaleString('es')} chars</span>${b.excluded?'<span class="stat-pill" style="background:#ffe0e0">excluido</span>':''}</div>
 <div class="block-actions">
   <button data-ia-guard onclick="copyBlockPrompt(${b.index})" ${(senOn||b.excluded)?'disabled title="'+(b.excluded?'Bloque excluido':'Bloqueado: material sensible')+'"':''}>Copiar prompt</button>
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
@@ -1299,7 +1301,7 @@ function renderResponses(){
   <span id="blockPill${b.index}">${blockStatusPill(b,v)}</span>
 </div>
 <div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${xmlEsc(b.text)}</textarea></div>
-<div id="blockPromptPrev${b.index}" style="display:none;margin:6px 0"><textarea rows="10" readonly style="font-size:.75rem;background:#f9fcff"></textarea><p style="font-size:.75rem;color:#666;margin-top:2px">Prompt completo enviado a la IA para este bloque.</p></div>
+<div id="blockPromptPrev${b.index}" style="display:none;margin:6px 0"><textarea rows="10" readonly style="font-size:.75rem;background:#f9fcff"></textarea><p style="font-size:.75rem;color:var(--c-text-muted);margin-top:2px">Prompt completo enviado a la IA para este bloque.</p></div>
 <textarea rows="5" placeholder="Pegar respuesta del modelo aquí..." oninput="saveBlockResp(${b.index},this.value)">${xmlEsc(b.response||'')}</textarea>`;
     c.appendChild(div);
   }
@@ -1356,7 +1358,20 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Refresh nav on load
   document.querySelectorAll('#stepNav button').forEach(b=>b.disabled=!canEnterStep(+b.dataset.step));
 
-  // Step 1
+  // Step 1 — drag & drop del documento
+  const dz=document.getElementById('dropZone');
+  if(dz){
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+    dz.addEventListener('drop',e=>{
+      e.preventDefault();dz.classList.remove('drag-over');
+      const files=e.dataTransfer?.files;
+      if(!files||!files.length)return;
+      const input=document.getElementById('fileInput');
+      input.files=files;
+      input.dispatchEvent(new Event('change'));
+    });
+  }
   document.getElementById('fileInput')?.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     P.fileName=file.name;touch();
@@ -1604,6 +1619,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     const blob=await buildPackageZip();
     download(safeName()+'_paquete.zip',blob);
     toast('Paquete completo descargado.');
+  });
+  document.getElementById('bm25Query')?.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('btnBm25')?.click();}
   });
   document.getElementById('btnBm25')?.addEventListener('click',()=>{
     const query=document.getElementById('bm25Query')?.value||'';
