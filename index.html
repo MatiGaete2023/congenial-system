@@ -28,7 +28,20 @@
     --bg:#0f1216; --panel:#171c23; --panel2:#1e242d; --line:#2a323d;
     --txt:#e7edf3; --muted:#9aa7b4; --accent:#4f8cff; --accent2:#6ee7b7;
     --warn:#f6c177; --bad:#ff6b6b; --good:#56d364; --chip:#243041;
+    --deep:#0d1117; --accentTxt:#06122e; --goodTxt:#06210f;
+    --okBorder:#2a4; --warnBorder:#5a4a2a;
+    --pillDoneBg:#10241a; --pillPendBg:#241f12;
     --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f5f7fa; --panel:#ffffff; --panel2:#f0f2f5; --line:#d0d7de;
+      --txt:#1f2328; --muted:#57606a; --accent:#0969da; --accent2:#2da44e;
+      --warn:#9a6700; --bad:#cf222e; --good:#1a7f37; --chip:#eaeef2;
+      --deep:#f6f8fa; --accentTxt:#ffffff; --goodTxt:#ffffff;
+      --okBorder:#1a7f37; --warnBorder:#d4a72c;
+      --pillDoneBg:#dafbe1; --pillPendBg:#fff8c5;
+    }
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
@@ -40,7 +53,7 @@
   header.app .spacer{flex:1}
   .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--chip);
     color:var(--muted);border:1px solid var(--line)}
-  .badge.ok{color:var(--good);border-color:#2a4} .badge.off{color:var(--muted)}
+  .badge.ok{color:var(--good);border-color:var(--okBorder)} .badge.off{color:var(--muted)}
   main{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 61px)}
   nav.steps{border-right:1px solid var(--line);background:var(--panel);padding:14px 10px}
   nav.steps ol{list-style:none;margin:0;padding:0}
@@ -48,7 +61,7 @@
     font-size:13px;display:flex;gap:9px;align-items:center;margin-bottom:2px}
   nav.steps li:hover{background:var(--panel2)}
   nav.steps li.active{background:var(--panel2);color:var(--txt)}
-  nav.steps li.done .num{background:var(--good);color:#06210f;border-color:var(--good)}
+  nav.steps li.done .num{background:var(--good);color:var(--goodTxt);border-color:var(--good)}
   nav.steps .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
     font-size:12px;border:1px solid var(--line);flex:none}
   nav.steps li.active .num{border-color:var(--accent);color:var(--accent)}
@@ -63,7 +76,7 @@
   button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);
     color:var(--txt);padding:8px 14px;border-radius:8px}
   button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#06122e;font-weight:600}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accentTxt);font-weight:600}
   button.primary:hover{filter:brightness(1.08)}
   button.ghost{background:transparent}
   button:disabled{opacity:.45;cursor:not-allowed}
@@ -71,7 +84,7 @@
   .drop{border:2px dashed var(--line);border-radius:var(--radius);padding:34px;text-align:center;
     color:var(--muted);transition:.15s;background:var(--panel2)}
   .drop.hover{border-color:var(--accent);color:var(--txt)}
-  input[type=text],input[type=number],textarea,select{background:#0d1117;color:var(--txt);
+  input[type=text],input[type=number],textarea,select{background:var(--deep);color:var(--txt);
     border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%}
   textarea{resize:vertical;min-height:90px;font-family:var(--mono);font-size:12.5px}
   label.fld{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
@@ -82,8 +95,8 @@
   table.blocks th,table.blocks td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
   table.blocks th{color:var(--muted);font-weight:600;font-size:12px}
   .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
-  .pill.done{color:var(--good);border-color:#2a4;background:#10241a}
-  .pill.pend{color:var(--warn);border-color:#5a4a2a;background:#241f12}
+  .pill.done{color:var(--good);border-color:var(--okBorder);background:var(--pillDoneBg)}
+  .pill.pend{color:var(--warn);border-color:var(--warnBorder);background:var(--pillPendBg)}
   .stat{display:inline-flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);
     border-radius:8px;padding:8px 14px;min-width:96px}
   .stat b{font-size:20px} .stat span{color:var(--muted);font-size:11px}
@@ -92,7 +105,7 @@
   .check{font-size:12px;display:inline-flex;gap:6px;align-items:center}
   .check.ok{color:var(--good)} .check.bad{color:var(--bad)} .check.warn{color:var(--warn)}
   code,pre{font-family:var(--mono)}
-  pre.out{background:#0d1117;border:1px solid var(--line);border-radius:8px;padding:14px;
+  pre.out{background:var(--deep);border:1px solid var(--line);border-radius:8px;padding:14px;
     overflow:auto;font-size:12.5px;max-height:420px}
   details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--panel2)}
   details summary{cursor:pointer;font-size:13px}
@@ -372,7 +385,7 @@
           <button id="btnGraphSvg" class="ghost" disabled>⬇ Exportar SVG</button>
         </div>
         <div id="graphInfo" class="small muted" style="margin-top:8px"></div>
-        <div id="graphView" style="margin-top:10px;overflow:auto;background:#0d1117;border:1px solid var(--line);border-radius:8px"></div>
+        <div id="graphView" style="margin-top:10px;overflow:auto;background:#0d1117;color-scheme:dark;border:1px solid var(--line);border-radius:8px"></div>
       </div>
     </div>
 
