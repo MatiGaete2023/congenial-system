@@ -49,7 +49,7 @@ const {
   parseAllResponses, validateResponse,
   parseConsolidation, reassembleParts, bm25Search,
   CONSOL_BATCH_THRESHOLD, buildBatchConsolPrompts,
-  normalizeProject,
+  normalizeProject, yamlSafe, bm25ResultHtml,
 } = globalThis;
 
 // ── Test harness ────────────────────────────────────────────────────────────
@@ -888,6 +888,37 @@ test('T-67 normalizeProject completa campos faltantes de bloques', () => {
   assert(np.blocks[0].excluded === false, 'excluded por defecto false');
   assert(typeof np.blocks[1].response === 'string', 'response por defecto string');
   assert(typeof np.blocks[0].text === 'string', 'text por defecto string');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-68  xmlEsc escapa comillas dobles y simples (contexto de atributo)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-68 xmlEsc escapa comillas dobles y simples', () => {
+  eq(xmlEsc('a"b'), 'a&quot;b', 'comilla doble');
+  eq(xmlEsc("a'b"), 'a&#39;b', 'comilla simple');
+  notIncludes(xmlEsc('" onfocus="alert(1)'), '"', 'no debe quedar comilla sin escapar');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-69  bm25ResultHtml escapa el texto del documento (anti-XSS)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-69 bm25ResultHtml escapa texto del documento', () => {
+  const html = bm25ResultHtml({ score: 1.5, text: '<img src=x onerror=alert(1)> artículo 5' });
+  notIncludes(html, '<img', 'no debe inyectar elementos del documento');
+  includes(html, '&lt;img', 'debe escapar el payload');
+  includes(html, 'Score 1.50', 'debe mostrar el score');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-70  buildObsidian produce YAML válido con comillas en metadatos
+// ════════════════════════════════════════════════════════════════════════════
+test('T-70 buildObsidian sanea comillas dobles en YAML', () => {
+  globalThis.P.blocks = [];
+  fakeProducts({ ficha: { title: 'Manual de "Derecho" Civil', author: 'A. "B."' } });
+  const md = buildObsidian();
+  const titleLine = md.split('\n').find(l => l.startsWith('title:'));
+  eq((titleLine.match(/"/g) || []).length, 2, 'solo las 2 comillas delimitadoras en title');
+  notIncludes(titleLine, '&quot;', 'sin entidades XML en YAML');
 });
 
 // ── Run ─────────────────────────────────────────────────────────────────────

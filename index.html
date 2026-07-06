@@ -369,7 +369,10 @@ function safeName(){
   return t.normalize('NFD').replace(/[̀-ͯ]/g,'')
     .replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').toLowerCase()||'rja_doc';
 }
-function xmlEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function xmlEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+// Para valores YAML entre comillas dobles (frontmatter Obsidian): las entidades
+// XML no aplican en YAML, así que se sustituyen las comillas dobles por simples.
+function yamlSafe(s){return String(s||'').replace(/"/g,"'");}
 
 // ============================================================
 // §3.1 ZIP — zipStore / zipStoreAsync
@@ -776,11 +779,11 @@ function buildObsidian(){
   const pr=P.products;if(!pr)return'';
   const f=pr.ficha;
   const yaml=['---',
-    `title: "${xmlEsc(f.title||P.meta.title||'')}"`,
-    `author: "${xmlEsc(f.author||P.meta.author||'')}"`,
+    `title: "${yamlSafe(f.title||P.meta.title||'')}"`,
+    `author: "${yamlSafe(f.author||P.meta.author||'')}"`,
     `year: ${f.year||P.meta.year||''}`,
-    `publisher: "${xmlEsc(f.publisher||P.meta.publisher||'')}"`,
-    `subject: "${xmlEsc(f.subject||P.meta.subject||'')}"`,
+    `publisher: "${yamlSafe(f.publisher||P.meta.publisher||'')}"`,
+    `subject: "${yamlSafe(f.subject||P.meta.subject||'')}"`,
     `tags: [juridico, rja${(pr.keywords||[]).slice(0,3).map(k=>', '+k.trim().replace(/\s+/g,'-')).join('')}]`,
     `rja_version: "0.3.0"`,
     '---'].join('\n');
@@ -936,6 +939,10 @@ function bm25Search(query,texts,k1=1.5,b=0.75){
     }
     return{idx:i,score,text};
   }).filter(r=>r.score>0).sort((a,b2)=>b2.score-a.score).slice(0,10);
+}
+// HTML de un resultado BM25 con el texto del documento escapado (anti-XSS).
+function bm25ResultHtml(r){
+  return `<div class="bm25-result"><strong>Score ${r.score.toFixed(2)}</strong><br>${xmlEsc(r.text.slice(0,200))}${r.text.length>200?'…':''}</div>`;
 }
 
 // ============================================================
@@ -1225,7 +1232,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('fileInput')?.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     P.fileName=file.name;touch();
-    document.getElementById('fileInfo').innerHTML=`<span class="stat-pill">📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)</span>`;
+    document.getElementById('fileInfo').innerHTML=`<span class="stat-pill">📄 ${xmlEsc(file.name)} (${(file.size/1024).toFixed(1)} KB)</span>`;
     toast(`Archivo cargado: ${file.name}`);
     gotoStep(2);
   });
@@ -1463,7 +1470,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     const results=bm25Search(query,paras);
     const el=document.getElementById('bm25Results');
     if(!results.length){el.innerHTML='<p class="warn-box">Sin resultados</p>';return;}
-    el.innerHTML=results.map(r=>`<div class="bm25-result"><strong>Score ${r.score.toFixed(2)}</strong><br>${r.text.slice(0,200)}${r.text.length>200?'…':''}</div>`).join('');
+    el.innerHTML=results.map(bm25ResultHtml).join('');
   });
 
   // Sensitive mode toggle
@@ -1487,7 +1494,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 // ============================================================
 if(typeof window==='undefined'){
   Object.assign(globalThis,{
-    P,blankProject,normalizeProject,touch,safeName,xmlEsc,
+    P,blankProject,normalizeProject,touch,safeName,xmlEsc,yamlSafe,bm25ResultHtml,
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,
