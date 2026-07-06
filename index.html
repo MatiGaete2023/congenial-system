@@ -52,6 +52,8 @@
   nav.steps .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
     font-size:12px;border:1px solid var(--line);flex:none}
   nav.steps li.active .num{border-color:var(--accent);color:var(--accent)}
+  nav.steps .navbadge{margin-left:auto;font-size:10px;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:1px 6px;flex:none}
   section.content{padding:22px 26px;overflow:auto}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     padding:18px 20px;margin-bottom:18px}
@@ -505,6 +507,7 @@ function gotoStep(n){
     li.classList.toggle('active',i===n);
     li.classList.toggle('done', i<=7 && ((i<P.step && i!==n) || (i<n && n<=7)));
   });
+  updateNavBadges();
   if(n===3)renderPrompts();
   if(n===4)renderResponses();
   if(n===5)renderConsolidation();
@@ -512,6 +515,19 @@ function gotoStep(n){
   if(n===7)renderExportChecklist();
   if(n===8)renderRag();
   if(n===9)renderGraph();
+}
+// Badges de progreso en la navegación: nº de bloques (paso 4) y X/N respuestas (paso 5).
+function updateNavBadges(){
+  const set=(step,txt)=>{
+    const li=$(`#stepNav li[data-step="${step}"]`);if(!li)return;
+    let b=li.querySelector('.navbadge');
+    if(!txt){if(b)b.remove();return;}
+    if(!b){b=el('span',{class:'navbadge'});li.append(b);}
+    b.textContent=txt;
+  };
+  set(3,P.blocks.length?String(P.blocks.length):'');
+  const done=P.blocks.filter(b=>b.response?.trim()).length;
+  set(4,P.blocks.length?`${done}/${P.blocks.length}`:'');
 }
 function canEnterStep(n){
   if(n>=1 && !P.fileName && !P.cleanText && !P.rawText)return false;
@@ -1165,6 +1181,7 @@ function updateRespStats(){
   const done=P.blocks.filter(b=>b.response?.trim()).length;
   $('#stDone').textContent=done;$('#stTotal').textContent=P.blocks.length;
   setBar('#respBar',P.blocks.length?done/P.blocks.length*100:0);
+  updateNavBadges();
 }
 
 /* ================================================================== *
