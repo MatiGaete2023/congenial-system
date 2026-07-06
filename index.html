@@ -1301,7 +1301,14 @@ function toggleBlockPrompt(idx){
   }else{el.style.display='none';}
 }
 function saveBlockResp(idx,val){
-  const b=P.blocks.find(x=>x.index===idx);if(b){b.response=val;touch();}
+  const b=P.blocks.find(x=>x.index===idx);if(!b)return;
+  b.response=val;touch();
+  // Actualiza solo la pill de estado (H-13): un re-render completo perdería el foco.
+  const pill=document.getElementById(`blockPill${idx}`);
+  if(pill)pill.innerHTML=blockStatusPill(b,validateResponse(b));
+  const dot=pill?.closest('.block-card')?.querySelector('.block-status');
+  if(dot){const v=validateResponse(b);
+    dot.className='block-status '+(!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn'));}
 }
 
 // ============================================================
@@ -1451,7 +1458,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     navigator.clipboard.writeText(prompt).then(()=>toast('Prompt de consolidación copiado.')).catch(()=>toast('Error al copiar'));
   });
   document.getElementById('btnSaveConsol')?.addEventListener('click',()=>{
-    P.consolResponse=document.getElementById('consolResponseArea')?.value||'';
+    const val=document.getElementById('consolResponseArea')?.value||'';
+    if(!val.trim())return toast('Pegue la respuesta de consolidación primero.');
+    P.consolResponse=val;
     touch();toast('Consolidación guardada.');
     gotoStep(8);
   });
