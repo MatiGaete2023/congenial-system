@@ -523,9 +523,14 @@ async function loadFile(file){
   if(file.size>50*1024*1024){
     if(!confirm(`El archivo pesa ${(file.size/1048576).toFixed(0)} MB. Procesarlo (y el OCR) puede consumir mucha memoria y tardar. ¿Continuar?`))return;
   }
+  // cargar otro archivo invalida todo lo derivado del anterior (bloques,
+  // respuestas, consolidación y productos); avisar si había trabajo hecho
+  const hadWork=P.blocks.some(b=>b.response?.trim())||!!P.consolResponse.trim()||!!P.products;
+  if(hadWork && !confirm('Cargar otro archivo descartará los bloques, respuestas, consolidación y productos del documento actual (el proyecto guardado no se toca hasta el próximo guardado). ¿Continuar?'))return;
   fileBuffer=await file.arrayBuffer();
   $('#btnExtract').disabled=false;
   P.fileName=file.name; P.fileType=ext; P.rawText=''; P.cleanText=''; P.blocks=[];
+  P.consolResponse=''; P.products=null; P.step=0;
   if(!P.meta.title)P.meta.title=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');
   $('#metaTitle').value=P.meta.title;
   $('#loadInfo').classList.remove('hidden');
