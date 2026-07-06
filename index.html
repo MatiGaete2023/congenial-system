@@ -577,7 +577,10 @@ const CDN = USE_LOCAL_VENDOR ? VENDOR : REMOTE;
 // La herramienta «⚙ Offline/SRI» calcula estos hashes en su propio equipo.
 const SRI = Object.assign({}, (typeof window!=='undefined' && window.RJA_SRI) || {});
 function loadScript(src){return new Promise((res,rej)=>{
-  if([...document.scripts].some(s=>s.src===src))return res();
+  // comparar en absoluto: script.src siempre devuelve URL absoluta y las
+  // rutas vendor/ son relativas (sin esto, el modo vendor re-inyecta la librería)
+  const abs=new URL(src,location.href).href;
+  if([...document.scripts].some(s=>s.src===abs))return res();
   const attrs={src};
   if(!USE_LOCAL_VENDOR){                 // SRI/CORS sólo aplican a recursos remotos
     attrs.crossorigin='anonymous';
