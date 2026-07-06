@@ -1071,5 +1071,32 @@ test('T-78 _prompts.md del paquete omite bloques excluidos', async () => {
   globalThis.P.rawText = '';
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-79/T-80/T-81  validateResponse alineada al objetivo 20–50 % (H-10)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-79 validateResponse ratio 10 % → ok:false', () => {
+  const src = 'x'.repeat(4000);
+  const resp = '### RESUMEN\n' + 'y'.repeat(388);  // ~400/4000 = 10 %
+  const r = validateResponse({ response: resp, text: src });
+  eq(r.ok, false, 'por debajo del 15 % debe fallar');
+  includes(r.reason, 'corta', 'reason menciona corta');
+});
+test('T-80 validateResponse ratio 30 % → ok sin warn', () => {
+  const src = 'x'.repeat(4000);
+  const resp = '### RESUMEN ANALÍTICO\n' + 'y'.repeat(1180);  // ~30 %
+  const r = validateResponse({ response: resp, text: src });
+  eq(r.ok, true, 'dentro del objetivo');
+  assert(r.warn !== true, 'sin advertencia');
+  assert(r.ratio > 0.25 && r.ratio < 0.35, 'ratio expuesto en el resultado');
+});
+test('T-81 validateResponse ratio 70 % → warn (excede 50 %)', () => {
+  const src = 'x'.repeat(4000);
+  const resp = '### RESUMEN\n' + 'y'.repeat(2788);  // ~70 %
+  const r = validateResponse({ response: resp, text: src });
+  eq(r.ok, true, 'no falla');
+  eq(r.warn, true, 'advierte exceso');
+  includes(r.reason, 'extensa', 'reason menciona extensa');
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

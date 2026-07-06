@@ -969,13 +969,32 @@ function parseAllResponses(blob){
   return{assigned,missing:P.blocks.filter(b=>!b.response?.trim()).map(b=>b.index)};
 }
 
+// Valida la respuesta contra el objetivo de extensión 20–50 % de los prompts
+// (H-10). Los umbrales de ratio solo aplican con fragmentos sustantivos
+// (≥400 chars): con textos diminutos el porcentaje no es significativo.
 function validateResponse(b){
   const r=(b.response||'').trim();if(!r)return{ok:false,reason:'vacía'};
+  const srcLen=(b.text||'').length;
+  const ratio=r.length/Math.max(1,srcLen);
+  const pct=Math.round(ratio*100);
   const hasHead=/###?\s*(CAP[IÍ]TULO|RESUMEN|AN[ÁA]LISIS|S[IÍ]NTESIS|CONCEPTOS)/i.test(r);
-  const tooShort=r.length<Math.max(200,(b.text||'').length*0.04);
-  if(tooShort)return{ok:false,reason:'muy corta vs. fragmento (revisar)'};
-  if(!hasHead)return{ok:true,reason:'sin encabezados esperados (revisar formato)',warn:true};
-  return{ok:true};
+  if(srcLen>500&&r.length<200)return{ok:false,ratio,reason:'muy corta (mínimo absoluto 200 chars)'};
+  if(srcLen>=400){
+    if(ratio<0.15)return{ok:false,ratio,reason:`muy corta: ${pct} % del fragmento (objetivo 20–50 %)`};
+    if(ratio<0.20)return{ok:true,ratio,warn:true,reason:`corta: ${pct} % (objetivo mínimo 20 %)`};
+    if(ratio>0.55)return{ok:true,ratio,warn:true,reason:`extensa: ${pct} % (objetivo máximo 50 %)`};
+  }
+  if(!hasHead)return{ok:true,ratio,reason:'sin encabezados esperados (revisar formato)',warn:true};
+  return{ok:true,ratio};
+}
+
+// Pill de estado de un bloque (reutilizada por renderResponses y saveBlockResp).
+function blockStatusPill(b,v){
+  if(!b.response?.trim())return'';
+  const pct=(v.ratio!=null&&(b.text||'').length>=400)?` ${Math.round(v.ratio*100)} %`:'';
+  const bg=v.ok?(v.warn?'#fff3cd':'#d4edda'):'#fdd';
+  const label=v.ok?(v.warn?'⚠':'✓'):'✗';
+  return `<span class="stat-pill" style="background:${bg}" title="${xmlEsc(v.reason||'respuesta válida')}">${label}${pct}</span>`;
 }
 
 // ============================================================
@@ -1245,7 +1264,7 @@ function renderResponses(){
   <button class="secondary" onclick="toggleBlockText(${b.index})">Ver texto</button>
   <button class="secondary" onclick="toggleBlockPrompt(${b.index})">Ver prompt</button>
   ${excBtn}
-  ${b.response?.trim()?`<span class="stat-pill" style="background:#d4edda">${v.ok?(v.warn?'⚠ formato':'✓'):'✗ corta'}</span>`:''}
+  <span id="blockPill${b.index}">${blockStatusPill(b,v)}</span>
 </div>
 <div id="blockText${b.index}" style="display:none;margin:6px 0"><textarea rows="4" readonly>${xmlEsc(b.text)}</textarea></div>
 <div id="blockPromptPrev${b.index}" style="display:none;margin:6px 0"><textarea rows="10" readonly style="font-size:.75rem;background:#f9fcff"></textarea><p style="font-size:.75rem;color:#666;margin-top:2px">Prompt completo enviado a la IA para este bloque.</p></div>
@@ -1612,7 +1631,7 @@ if(typeof window==='undefined'){
     buildOfflineMarkdown,buildManualFichaMarkdown,
     isSensitive,sensitiveGuardIA,sensitiveAllowLocal,updateSensitiveUI,
     updateBlockChapter,toggleBlockExclude,renderBlockStructure,
-    parseAllResponses,validateResponse,
+    parseAllResponses,validateResponse,blockStatusPill,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,
     CONSOL_BATCH_THRESHOLD,buildBatchConsolPrompts,
