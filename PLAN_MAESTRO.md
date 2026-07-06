@@ -4,6 +4,11 @@
 > Destinatario: una IA ejecutora (Claude Sonnet o equivalente) que trabajará
 > tarea por tarea siguiendo el ciclo de `AUTOLOOP.md`.
 > Fecha de auditoría: 2026-07-06 · Base: `index.html` @ rama `claude/legal-doc-summarizer-hximuq`.
+>
+> **ESTADO DE EJECUCIÓN (2026-07-06): T1–T14 COMPLETADAS** (un commit por tarea,
+> suite en 52 tests, versión 0.4.0 — ver `CHANGELOG.md`). Queda abierta solo
+> **T15 (CSP, opcional)**: requiere prueba manual en navegador con OCR activo
+> antes de aplicarse; no ejecutar sin esa verificación.
 
 ---
 
