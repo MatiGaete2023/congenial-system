@@ -103,6 +103,17 @@
   a{color:var(--accent)}
   .copybtn{font-size:12px;padding:5px 10px}
   select{width:auto}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+  summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (max-width:900px){
+    main{grid-template-columns:1fr}
+    nav.steps{border-right:none;border-bottom:1px solid var(--line);padding:8px}
+    nav.steps ol{display:flex;overflow-x:auto;gap:4px;padding-bottom:4px}
+    nav.steps li{flex:none;white-space:nowrap}
+    nav.steps hr,nav.steps div.small{display:none}
+    section.content{padding:14px}
+    .grid2{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -651,7 +662,11 @@ async function transcribeAudio(){
   return ((out&&out.text)||'').trim();
 }
 
-function setBar(id,pct){$(id).style.width=Math.max(0,Math.min(100,pct))+'%';}
+function setBar(id,pct){const n=$(id);pct=Math.max(0,Math.min(100,pct));
+  n.style.width=pct+'%';
+  const bar=n.parentElement;
+  if(bar&&bar.setAttribute){bar.setAttribute('aria-valuenow',Math.round(pct));
+    bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');}}
 function setExtractStatus(t){$('#extractStatus').textContent=t;}
 
 let extractCancel=false, extracting=false;
