@@ -51,6 +51,7 @@ const {
   CONSOL_BATCH_THRESHOLD, buildBatchConsolPrompts,
   normalizeProject, yamlSafe, bm25ResultHtml,
   persistDraft, clearDraft, DRAFT_KEY,
+  ensurePdfWorker, VENDOR,
 } = globalThis;
 
 // ── Test harness ────────────────────────────────────────────────────────────
@@ -1000,6 +1001,24 @@ test('T-74 borrador persistido es restaurable', () => {
     globalThis.P.blocks = [];
     globalThis.P.rawText = '';
     delete globalThis.localStorage;
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// T-75  ensurePdfWorker prefiere el worker LOCAL (modo sin red, H-06)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-75 ensurePdfWorker asigna worker local si falta workerSrc', () => {
+  globalThis.pdfjsLib = { GlobalWorkerOptions: { workerSrc: '' } };
+  try {
+    ensurePdfWorker();
+    eq(globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc, VENDOR.pdfWorkerLocal,
+      'debe usar el worker local, no el CDN');
+    // no debe pisar un workerSrc ya definido (p. ej. el CDN de loadVendorLibs)
+    globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn/x.js';
+    ensurePdfWorker();
+    eq(globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc, 'https://cdn/x.js', 'no debe pisar el existente');
+  } finally {
+    delete globalThis.pdfjsLib;
   }
 });
 

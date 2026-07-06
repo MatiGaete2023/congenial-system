@@ -1069,10 +1069,13 @@ async function loadVendorLibs(){
     toast('Error cargando librerías: '+err.message,5000);
   }
 }
-// Configura el worker de PDF.js sin pisar uno ya definido (CDN o local).
+// Configura el worker de PDF.js sin pisar uno ya definido.
+// Si workerSrc está vacío aquí es porque PDF.js se cargó manualmente (archivo
+// local junto al HTML) — loadVendorLibs ya asigna el CDN en su propio flujo —,
+// así que se prefiere el worker LOCAL para que el modo sin red funcione (H-06).
 function ensurePdfWorker(){
   if(typeof pdfjsLib!=='undefined'&&!pdfjsLib.GlobalWorkerOptions.workerSrc)
-    pdfjsLib.GlobalWorkerOptions.workerSrc=VENDOR.pdfWorker||VENDOR.pdfWorkerLocal;
+    pdfjsLib.GlobalWorkerOptions.workerSrc=VENDOR.pdfWorkerLocal;
 }
 
 async function extractPdf(file){
@@ -1579,7 +1582,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 if(typeof window==='undefined'){
   Object.assign(globalThis,{
     P,blankProject,normalizeProject,touch,safeName,xmlEsc,yamlSafe,bm25ResultHtml,
-    persistDraft,clearDraft,DRAFT_KEY,
+    persistDraft,clearDraft,DRAFT_KEY,ensurePdfWorker,VENDOR,
     DOCX_MIME,zipStore,zipStoreAsync,
     mdRuns,pPara,heading,renderMarkdownToDocxBlocks,tocField,
     buildDocxXml,buildDocx,STYLES_XML,SETTINGS_XML,
