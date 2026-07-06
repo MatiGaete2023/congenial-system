@@ -223,6 +223,47 @@ eq(NP.blocks, [], 'normalizeProject corrige blocks no-array');
 eq(NP.step, 7, 'normalizeProject acota step al rango 0–7');
 eq(NP.consolPartials, ['','ok'], 'normalizeProject sanea consolPartials a strings');
 
+// --- 19. smoke test: el script completo se ejecuta sin errores de cableado ---
+// Arnés DOM mínimo: querySelector devuelve un stub SOLO si el id existe en el
+// HTML (así un typo de id reproduce el null real del navegador y revienta).
+function smokeRun(src){
+  const idSet = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m=>m[1]));
+  function stubEl(){
+    const t = {style:{},dataset:{},children:[],
+      classList:{add(){},remove(){},toggle(){},contains(){return false;}}};
+    return new Proxy(t,{
+      get(o,k){
+        if(k in o)return o[k];
+        if(['addEventListener','append','appendChild','remove','replaceChildren',
+            'click','setAttribute','focus','select'].includes(k))return ()=>{};
+        if(k==='querySelector')return ()=>stubEl();
+        if(k==='querySelectorAll')return ()=>[];
+        return undefined;
+      },
+      set(){return true;}
+    });
+  }
+  const doc = {
+    querySelector(sel){const m=sel.match(/^#([\w-]+)$/);return m?(idSet.has(m[1])?stubEl():null):stubEl();},
+    querySelectorAll(){return [];},
+    createElement(){return stubEl();},
+    createTextNode(){return {nodeType:3};},
+    addEventListener(){},
+    head:stubEl(), body:stubEl(), scripts:[],
+  };
+  const win = {addEventListener(){}};
+  const idb = {open(){return {};}}; // promesa de DB queda pendiente: no dispara timers
+  new Function('document','window','indexedDB','navigator','location','confirm','alert',
+    src)(doc,win,idb,{},{href:'http://localhost/'},()=>true,()=>{});
+}
+let smokeErr = null;
+try{ smokeRun(script); }catch(e){ smokeErr = e; }
+ok(!smokeErr, 'smoke: script completo sin ReferenceError/TypeError — '+(smokeErr&&smokeErr.message));
+// autotest del arnés: un id inexistente DEBE reventar (garantiza que el smoke detecta typos)
+let typoErr = null;
+try{ smokeRun(script+`\n$('#idQueNoExiste').addEventListener('click',()=>{});`); }catch(e){ typoErr = e; }
+ok(!!typoErr, 'smoke: el arnés detecta ids inexistentes');
+
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);
 process.exit(fail === 0 ? 0 : 1);
