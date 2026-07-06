@@ -1098,5 +1098,25 @@ test('T-81 validateResponse ratio 70 % → warn (excede 50 %)', () => {
   includes(r.reason, 'extensa', 'reason menciona extensa');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// T-82/T-83  nextPendingBlock (M-03)
+// ════════════════════════════════════════════════════════════════════════════
+test('T-82 nextPendingBlock devuelve el primer bloque activo sin respuesta', () => {
+  const { nextPendingBlock } = globalThis;
+  globalThis.P.blocks = [
+    { index: 1, chapter: 'A', text: 'x', response: 'hecha', excluded: false },
+    { index: 2, chapter: 'B', text: 'x', response: '', excluded: true },   // excluido: se salta
+    { index: 3, chapter: 'C', text: 'x', response: '', excluded: false },
+  ];
+  eq(nextPendingBlock().index, 3, 'debe saltar respondidos y excluidos');
+  globalThis.P.blocks = [];
+});
+test('T-83 nextPendingBlock → null cuando todo está respondido', () => {
+  const { nextPendingBlock } = globalThis;
+  globalThis.P.blocks = [{ index: 1, chapter: 'A', text: 'x', response: 'ok', excluded: false }];
+  eq(nextPendingBlock(), null, 'sin pendientes → null');
+  globalThis.P.blocks = [];
+});
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 runAll();

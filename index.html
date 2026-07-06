@@ -73,6 +73,7 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
 .block-struct-row input[type=text]{flex:1;font-size:.82rem;padding:4px 6px;border:1px solid #ccc;border-radius:4px}
 .block-struct-row input[type=checkbox]{width:auto;margin:0}
 .block-excluded{opacity:.45}
+.block-highlight{box-shadow:0 0 0 3px var(--c-primary);transition:box-shadow .3s}
 .block-excluded .block-header h4::before{content:'[Excluido] ';color:#999;font-weight:normal}
 </style>
 </head>
@@ -210,6 +211,12 @@ details summary{cursor:pointer;font-size:.85rem;color:#555;padding:4px 0}
   <h2>6. Resumir bloques</h2>
   <div class="card">
     <label><input type="checkbox" id="optStrictValidation"> Validación estricta — añade marcador <code>[[RJA_BLOCK_ID]]</code> al prompt (opt-in)</label>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <strong id="respProgress" style="font-size:.9rem">Respondidos 0/0</strong>
+      <button id="btnCopyNextPending" data-ia-guard style="margin:0">Copiar siguiente prompt pendiente</button>
+    </div>
   </div>
   <div id="blocksContainer"></div>
   <div class="card">
@@ -1255,9 +1262,24 @@ function updateRawStats(){
   el.textContent=`${t.length.toLocaleString('es')} chars · ${(t.match(/\S+/g)||[]).length.toLocaleString('es')} palabras`;
 }
 
+// Primer bloque activo sin respuesta (para "Copiar siguiente pendiente").
+function nextPendingBlock(){
+  return P.blocks.find(b=>!b.excluded&&!b.response?.trim())||null;
+}
+function updateRespProgress(){
+  const el=document.getElementById('respProgress');if(!el)return;
+  const activos=P.blocks.filter(b=>!b.excluded);
+  const done=activos.filter(b=>b.response?.trim());
+  const chars=done.reduce((s,b)=>s+b.response.length,0);
+  el.textContent=`Respondidos ${done.length}/${activos.length}`+(chars?` · ${chars.toLocaleString('es')} chars`:'');
+  const btn=document.getElementById('btnCopyNextPending');
+  if(btn&&!isSensitive())btn.disabled=!nextPendingBlock();
+}
+
 function renderResponses(){
   const c=document.getElementById('blocksContainer');if(!c)return;
   c.innerHTML='';
+  updateRespProgress();
   for(const b of P.blocks){
     const v=validateResponse(b);
     const statusClass=!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn');
@@ -1319,6 +1341,7 @@ function saveBlockResp(idx,val){
   const dot=pill?.closest('.block-card')?.querySelector('.block-status');
   if(dot){const v=validateResponse(b);
     dot.className='block-status '+(!b.response?.trim()?'':(v.ok&&!v.warn?'ok':'warn'));}
+  updateRespProgress();
 }
 
 // ============================================================
@@ -1441,6 +1464,20 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   // Step 6
+  document.getElementById('btnCopyNextPending')?.addEventListener('click',()=>{
+    if(!sensitiveGuardIA())return;
+    const b=nextPendingBlock();
+    if(!b)return toast('No quedan bloques pendientes.');
+    navigator.clipboard.writeText(blockPrompt(b)).then(()=>{
+      toast(`Prompt del bloque ${b.index} copiado (siguiente pendiente).`,3200,'ok');
+      const card=document.getElementById(`blockPill${b.index}`)?.closest('.block-card');
+      if(card){
+        card.scrollIntoView({behavior:'smooth',block:'center'});
+        card.classList.add('block-highlight');
+        setTimeout(()=>card.classList.remove('block-highlight'),2000);
+      }
+    }).catch(()=>toast('Error al copiar',3200,'err'));
+  });
   document.getElementById('btnBulkHelp')?.addEventListener('click',()=>{
     const b=document.getElementById('bulkHelpBox');if(b)b.style.display=b.style.display==='none'?'block':'none';
   });
@@ -1650,7 +1687,7 @@ if(typeof window==='undefined'){
     buildOfflineMarkdown,buildManualFichaMarkdown,
     isSensitive,sensitiveGuardIA,sensitiveAllowLocal,updateSensitiveUI,
     updateBlockChapter,toggleBlockExclude,renderBlockStructure,
-    parseAllResponses,validateResponse,blockStatusPill,
+    parseAllResponses,validateResponse,blockStatusPill,nextPendingBlock,
     parseConsolidation,reassembleParts,bm25Search,
     pageMarksOn,strictValidationOn,
     CONSOL_BATCH_THRESHOLD,buildBatchConsolPrompts,
