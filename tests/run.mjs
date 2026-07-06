@@ -44,9 +44,10 @@ const pieces = [
   grabFn('groupIntoLotes'), grabFn('consolidationPlan'),
   grabFn('buildConceptGraph'), grabFn('graphToSvg'),
   grabFn('fragmentContent'), grabFn('consolidationPrompt'),
+  grabFn('uid'), grabFn('blankProject'), grabFn('normalizeProject'),
 ];
 const factory = new Function(pieces.join('\n') +
-  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,consolidationPlan,buildConceptGraph,graphToSvg,fragmentContent,consolidationPrompt};');
+  '\nreturn {stripAccents,headerKey,splitSections,listItems,csvItems,dedupe,cleanVal,parseFicha,cleanText,detectChapters,rebuildIndex,zipStore,tokenize,splitPassages,bm25Search,groupIntoLotes,consolidationPlan,buildConceptGraph,graphToSvg,fragmentContent,consolidationPrompt,normalizeProject};');
 const A = factory();
 
 // --- mini framework ---
@@ -213,6 +214,14 @@ eq(planS.groups.length, 1, 'single = 1 grupo');
 // groupIntoLotes con medidor alternativo (lenOf)
 eq(A.groupIntoLotes([{text:'x'.repeat(999),response:'ab'},{text:'',response:'cd'}], 3, b=>b.response.length)
   .map(l=>l.length), [1,1], 'groupIntoLotes respeta lenOf (mide response, no text)');
+
+// --- 18. normalizeProject: solo claves del esquema, tipos corregidos ---
+const NP = A.normalizeProject({fileName:'doc.pdf', junk:'basura', blocks:'no-array', step:'99', consolPartials:[1,'ok']});
+ok(!('junk' in NP), 'normalizeProject descarta claves desconocidas');
+eq(NP.fileName, 'doc.pdf', 'normalizeProject conserva claves válidas');
+eq(NP.blocks, [], 'normalizeProject corrige blocks no-array');
+eq(NP.step, 7, 'normalizeProject acota step al rango 0–7');
+eq(NP.consolPartials, ['','ok'], 'normalizeProject sanea consolPartials a strings');
 
 // --- resumen ---
 console.log(`\n${fail === 0 ? '✓' : '✗'} Pruebas: ${pass} OK, ${fail} fallidas`);

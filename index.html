@@ -439,8 +439,10 @@ function normalizeProject(data){
   const src=(data && typeof data==='object')?data:{};
   const meta=(src.meta && typeof src.meta==='object')?src.meta:{};
   const products=(src.products && typeof src.products==='object')?src.products:null;
+  // Solo claves conocidas: un JSON importado no puede inyectar campos ajenos
+  // al esquema (se descartan en vez de persistirse en IndexedDB).
   return {
-    ...base,...src,
+    ...base,
     id: typeof src.id==='string' && src.id ? src.id : uid(),
     createdAt: Number.isFinite(src.createdAt)?src.createdAt:Date.now(),
     updatedAt: Number.isFinite(src.updatedAt)?src.updatedAt:Date.now(),
