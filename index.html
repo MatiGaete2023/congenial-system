@@ -838,12 +838,17 @@ function segment(){
     }
     flush();
   }
-  // preservar respuestas previas si re-segmentamos y el conteo coincide
+  // preservar respuestas previas si re-segmentamos y el conteo coincide;
+  // si alguna respuesta no sobrevive al nuevo corte, pedir confirmación antes
   const prev=P.blocks;
-  P.blocks=blocks.map((b,i)=>({
+  const nuevo=blocks.map((b,i)=>({
     id:'b'+i,index:i+1,chapter:b.chapter,text:b.text,
     response: (prev[i]&&prev[i].chapter===b.chapter)?prev[i].response:''
   }));
+  const perdidas=prev.filter(b=>b.response?.trim()).length
+    - nuevo.filter(b=>b.response?.trim()).length;
+  if(perdidas>0 && !confirm(`La nueva segmentación descartaría ${perdidas} respuesta(s) ya pegada(s) (los capítulos/cortes cambiaron). ¿Continuar?`))return;
+  P.blocks=nuevo;
   renderBlocks();
   $('#structInfo').innerHTML=`Capítulos detectados: <b>${heads.length}</b> · Bloques generados: <b>${P.blocks.length}</b>`;
   touch();
