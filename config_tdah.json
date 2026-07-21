@@ -1,0 +1,24 @@
+{
+  "$comentario": "Configuración de la Plantilla de Extracción de Conocimiento TDAH. Cada valor está calibrado para lectura densa (jurídica/histórica) con TDAH inatento; la justificación neurocientífica completa está en el docstring de ConfigTDAH dentro de extractor_tdah.py. Cambia los valores aquí, nunca en el código.",
+
+  "ppm_lectura_densa": 110,
+  "$ppm_lectura_densa": "Palabras por minuto EFECTIVAS en texto jurídico denso con TDAH: 150 ppm de lectura densa neurotípica menos ~27% por relecturas involuntarias (mind-wandering). Súbelo solo si mides tu velocidad real con cronómetro durante 3 sesiones.",
+
+  "minutos_por_bloque": 15,
+  "$minutos_por_bloque": "Duración total del micro-bloque. La atención sostenida TDAH sin estímulo externo colapsa entre los 10 y 20 minutos; 15 está en la ventana segura y divide la hora en 4 partes exactas (menos cálculo mental = menos carga ejecutiva).",
+
+  "minutos_lectura_efectiva": 11,
+  "$minutos_lectura_efectiva": "Minutos del bloque dedicados a leer. El resto (4 min) queda DENTRO del bloque para recuperación activa y recompensa: si la recompensa vive fuera del bloque, el descuento hiperbólico del refuerzo demorado la anula.",
+
+  "max_ideas_por_bloque": 5,
+  "$max_ideas_por_bloque": "Techo de ideas nuevas por bloque. Memoria de trabajo = 4±1 chunks (Cowan 2001); en TDAH, el extremo bajo del rango.",
+
+  "bloques_por_sesion_max": 4,
+  "$bloques_por_sesion_max": "Tras ~60 min la inhibición de distractores del córtex prefrontal dorsolateral se agota. El sistema se niega a planificar más de 4 bloques seguidos.",
+
+  "minutos_pausa_corta": 2,
+  "$minutos_pausa_corta": "Recompensa inmediata al cierre de cada bloque (#recompensa-dopamina).",
+
+  "minutos_descanso_largo": 20,
+  "$minutos_descanso_largo": "Descanso obligatorio tras cada sesión de 4 bloques, sin pantallas de texto, para reponer capacidad de inhibición."
+}
