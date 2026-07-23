@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tdah-estudio"
+version = "2.0.0"
+description = "Sistema de Extracción de Conocimiento para TDAH inatento: micro-learning de 15 min, prompt LLM y vault Obsidian para Derecho e Historia"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "MatiGaete2023" }]
+keywords = ["tdah", "adhd", "estudio", "obsidian", "micro-learning"]
+
+# Cero dependencias obligatorias en runtime: requisito de diseño.
+# La barrera de instalación es la primera barrera ejecutiva.
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdf>=4"]
+dev = ["pytest>=7", "hypothesis>=6", "ruff>=0.4", "mypy>=1.8"]
+
+[project.scripts]
+tdah-estudio = "tdah_estudio.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tdah_estudio = ["plantillas/*.md", "plantillas/vault/*.md"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.9"
+mypy_path = "src"
+packages = ["tdah_estudio"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
