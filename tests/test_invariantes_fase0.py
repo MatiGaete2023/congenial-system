@@ -15,20 +15,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.xfail(reason="FASE 1b pendiente: chunker puro", strict=False)
-def test_chunker_no_pierde_palabras() -> None:
-    from tdah_estudio.chunker import MicroChunker  # noqa: F401
-
-    raise AssertionError("se implementa en tests/test_chunker.py (hypothesis)")
-
-
-@pytest.mark.xfail(reason="FASE 1b pendiente: chunker puro", strict=False)
-def test_chunker_respeta_presupuesto_120pct() -> None:
-    from tdah_estudio.chunker import MicroChunker  # noqa: F401
-
-    raise AssertionError("se implementa en tests/test_chunker.py (hypothesis)")
-
-
 @pytest.mark.xfail(reason="FASE 2 pendiente: contrato LLM", strict=False)
 def test_contrato_llm_rechaza_respuestas_invalidas() -> None:
     from tdah_estudio.prompts import GeneradorPrompt  # noqa: F401
