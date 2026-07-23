@@ -15,13 +15,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.xfail(reason="FASE 2 pendiente: contrato LLM", strict=False)
-def test_contrato_llm_rechaza_respuestas_invalidas() -> None:
-    from tdah_estudio.prompts import GeneradorPrompt  # noqa: F401
-
-    raise AssertionError("se implementa en tests/test_prompts.py")
-
-
 @pytest.mark.xfail(reason="FASE 3 pendiente: renderizado desde plantillas", strict=False)
 def test_vault_idempotente_no_pisa_notas_de_usuario() -> None:
     from tdah_estudio.obsidian import ExportadorObsidian  # noqa: F401

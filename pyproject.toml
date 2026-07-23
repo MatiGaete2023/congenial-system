@@ -42,6 +42,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+# El system prompt contiene líneas largas que son CONTENIDO visible para el
+# LLM: partirlas cambiaría el prompt entregado, no el estilo del código.
+"src/tdah_estudio/prompts.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.9"
 mypy_path = "src"
