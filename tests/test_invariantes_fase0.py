@@ -15,13 +15,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.xfail(reason="FASE 3 pendiente: renderizado desde plantillas", strict=False)
-def test_vault_idempotente_no_pisa_notas_de_usuario() -> None:
-    from tdah_estudio.obsidian import ExportadorObsidian  # noqa: F401
-
-    raise AssertionError("se implementa en tests/test_obsidian.py")
-
-
 @pytest.mark.xfail(reason="FASE 4 pendiente: round-trip PDF→markdown", strict=False)
 def test_round_trip_pdf_a_markdown() -> None:
     from tdah_estudio.cli import main  # noqa: F401
