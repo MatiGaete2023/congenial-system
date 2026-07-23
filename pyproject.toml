@@ -54,3 +54,8 @@ packages = ["tdah_estudio"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+# pypdf es extra opcional [pdf]: el chequeo de tipos no debe exigirlo.
+[[tool.mypy.overrides]]
+module = "pypdf"
+ignore_missing_imports = true
