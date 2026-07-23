@@ -15,13 +15,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.xfail(reason="FASE 1a pendiente: config con avisos", strict=False)
-def test_config_avisa_claves_desconocidas() -> None:
-    from tdah_estudio.config import ConfigTDAH  # noqa: F401
-
-    raise AssertionError("se implementa en tests/test_config.py")
-
-
 @pytest.mark.xfail(reason="FASE 1b pendiente: chunker puro", strict=False)
 def test_chunker_no_pierde_palabras() -> None:
     from tdah_estudio.chunker import MicroChunker  # noqa: F401
