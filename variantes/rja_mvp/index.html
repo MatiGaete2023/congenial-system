@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Resumidor Jurídico Asistido — Claude &amp; ChatGPT</title>
+<meta name="description" content="Orquestador documental local para resumir documentos jurídicos extensos con Claude o ChatGPT, sin APIs ni nube." />
+<link rel="icon" href="data:," />
+<!--
+  Resumidor Jurídico Asistido (RJA)
+  =================================
+  Aplicación 100% local (HTML + JS vanilla). No realiza llamadas a APIs de
+  procesamiento ni envía documentos a la nube. El usuario es quien copia los
+  prompts hacia Claude/ChatGPT (interfaz web) y pega de vuelta las respuestas.
+
+  Persistencia: IndexedDB (en el navegador del usuario). Nada sale del equipo.
+
+  Bibliotecas opcionales (mejoran extracción, NO son obligatorias):
+    - pdf.js      -> texto de PDF
+    - tesseract.js-> OCR de PDF imagen
+    - mammoth.js  -> texto de DOCX
+  Se cargan bajo demanda desde CDN. TXT y Markdown funcionan sin dependencias.
+  La exportación a Markdown y DOCX se genera con código propio (sin librerías).
+  Para uso totalmente sin red, ver README.md (vendorizado de librerías).
+-->
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c23; --panel2:#1e242d; --line:#2a323d;
+    --txt:#e7edf3; --muted:#9aa7b4; --accent:#4f8cff; --accent2:#6ee7b7;
+    --warn:#f6c177; --bad:#ff6b6b; --good:#56d364; --chip:#243041;
+    --deep:#0d1117; --accentTxt:#06122e; --goodTxt:#06210f;
+    --okBorder:#2a4; --warnBorder:#5a4a2a;
+    --pillDoneBg:#10241a; --pillPendBg:#241f12;
+    --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f5f7fa; --panel:#ffffff; --panel2:#f0f2f5; --line:#d0d7de;
+      --txt:#1f2328; --muted:#57606a; --accent:#0969da; --accent2:#2da44e;
+      --warn:#9a6700; --bad:#cf222e; --good:#1a7f37; --chip:#eaeef2;
+      --deep:#f6f8fa; --accentTxt:#ffffff; --goodTxt:#ffffff;
+      --okBorder:#1a7f37; --warnBorder:#d4a72c;
+      --pillDoneBg:#dafbe1; --pillPendBg:#fff8c5;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);line-height:1.5;font-size:15px}
+  header.app{padding:18px 22px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--panel)}
+  header.app h1{font-size:18px;margin:0}
+  header.app .sub{color:var(--muted);font-size:13px}
+  header.app .spacer{flex:1}
+  .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--chip);
+    color:var(--muted);border:1px solid var(--line)}
+  .badge.ok{color:var(--good);border-color:var(--okBorder)} .badge.off{color:var(--muted)}
+  main{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 61px)}
+  nav.steps{border-right:1px solid var(--line);background:var(--panel);padding:14px 10px}
+  nav.steps ol{list-style:none;margin:0;padding:0}
+  nav.steps li{padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--muted);
+    font-size:13px;display:flex;gap:9px;align-items:center;margin-bottom:2px}
+  nav.steps li:hover{background:var(--panel2)}
+  nav.steps li.active{background:var(--panel2);color:var(--txt)}
+  nav.steps li.done .num{background:var(--good);color:var(--goodTxt);border-color:var(--good)}
+  nav.steps .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;border:1px solid var(--line);flex:none}
+  nav.steps li.active .num{border-color:var(--accent);color:var(--accent)}
+  nav.steps .navbadge{margin-left:auto;font-size:10px;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:1px 6px;flex:none}
+  section.content{padding:22px 26px;overflow:auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;margin-bottom:18px}
+  .panel h2{margin:0 0 4px;font-size:16px}
+  .panel p.help{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .hidden{display:none !important}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt);padding:8px 14px;border-radius:8px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accentTxt);font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .drop{border:2px dashed var(--line);border-radius:var(--radius);padding:34px;text-align:center;
+    color:var(--muted);transition:.15s;background:var(--panel2)}
+  .drop.hover{border-color:var(--accent);color:var(--txt)}
+  input[type=text],input[type=number],textarea,select{background:var(--deep);color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%}
+  textarea{resize:vertical;min-height:90px;font-family:var(--mono);font-size:12.5px}
+  label.fld{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+  .progress{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .progress>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0}
+  table.blocks{width:100%;border-collapse:collapse;font-size:13px}
+  table.blocks th,table.blocks td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.blocks th{color:var(--muted);font-weight:600;font-size:12px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.done{color:var(--good);border-color:var(--okBorder);background:var(--pillDoneBg)}
+  .pill.pend{color:var(--warn);border-color:var(--warnBorder);background:var(--pillPendBg)}
+  .stat{display:inline-flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 14px;min-width:96px}
+  .stat b{font-size:20px} .stat span{color:var(--muted);font-size:11px}
+  .toast{position:fixed;bottom:18px;right:18px;background:var(--panel2);border:1px solid var(--accent);
+    padding:12px 16px;border-radius:8px;max-width:340px;font-size:13px;box-shadow:0 8px 30px #0008;z-index:50}
+  .check{font-size:12px;display:inline-flex;gap:6px;align-items:center}
+  .check.ok{color:var(--good)} .check.bad{color:var(--bad)} .check.warn{color:var(--warn)}
+  code,pre{font-family:var(--mono)}
+  pre.out{background:var(--deep);border:1px solid var(--line);border-radius:8px;padding:14px;
+    overflow:auto;font-size:12.5px;max-height:420px}
+  details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--panel2)}
+  details summary{cursor:pointer;font-size:13px}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  .tag{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:6px;
+    padding:2px 8px;margin:2px;font-size:12px}
+  .productbox{margin-bottom:14px}
+  .productbox h3{font-size:14px;margin:0 0 6px;display:flex;gap:8px;align-items:center}
+  hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+  a{color:var(--accent)}
+  .copybtn{font-size:12px;padding:5px 10px}
+  select{width:auto}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+  summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (max-width:900px){
+    main{grid-template-columns:1fr}
+    nav.steps{border-right:none;border-bottom:1px solid var(--line);padding:8px}
+    nav.steps ol{display:flex;overflow-x:auto;gap:4px;padding-bottom:4px}
+    nav.steps li{flex:none;white-space:nowrap}
+    nav.steps hr,nav.steps div.small{display:none}
+    section.content{padding:14px}
+    .grid2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>⚖️ Resumidor Jurídico Asistido</h1>
+  <span class="sub">Claude &amp; ChatGPT · 100% local · sin APIs</span>
+  <span class="spacer"></span>
+  <span id="projName" class="badge">Sin proyecto</span>
+  <span id="capPdf" class="badge off" title="Extracción de PDF">PDF</span>
+  <span id="capOcr" class="badge off" title="OCR de imagen">OCR</span>
+  <span id="capDocx" class="badge off" title="Lectura de DOCX">DOCX</span>
+  <button id="btnNew" class="ghost">Nuevo</button>
+  <button id="btnOpen" class="ghost">Proyectos</button>
+  <button id="btnOffline" class="ghost" title="Modo sin conexión, descarga de librerías y verificación de integridad (SRI)">⚙ Offline/SRI</button>
+</header>
+
+<main>
+  <nav class="steps">
+    <ol id="stepNav">
+      <li data-step="0"><span class="num">1</span> Cargar archivo</li>
+      <li data-step="1"><span class="num">2</span> Extraer y limpiar</li>
+      <li data-step="2"><span class="num">3</span> Estructura y bloques</li>
+      <li data-step="3"><span class="num">4</span> Prompts por bloque</li>
+      <li data-step="4"><span class="num">5</span> Pegar respuestas</li>
+      <li data-step="5"><span class="num">6</span> Consolidación</li>
+      <li data-step="6"><span class="num">7</span> Productos finales</li>
+      <li data-step="7"><span class="num">8</span> Exportar</li>
+    </ol>
+    <div class="small muted" style="padding:8px 12px 4px;text-transform:uppercase;letter-spacing:.05em;font-size:10px">Herramientas locales</div>
+    <ol id="toolNav">
+      <li data-step="8"><span class="num">🔎</span> Consultar (local)</li>
+      <li data-step="9"><span class="num">🕸</span> Grafo conceptual</li>
+    </ol>
+    <hr>
+    <div class="small muted" style="padding:0 12px">
+      Persistencia automática en este navegador (IndexedDB). Puede cerrar y
+      continuar después.
+    </div>
+    <div id="saveStatus" class="small muted" style="padding:8px 12px 0" aria-live="polite"></div>
+  </nav>
+
+  <section class="content">
+
+    <!-- STEP 0: LOAD -->
+    <div class="step" data-step="0">
+      <div class="panel">
+        <h2>1 · Seleccionar archivo jurídico</h2>
+        <p class="help">Formatos: PDF (texto o imagen), DOCX, TXT, Markdown y audio/vídeo (transcripción Whisper local). Pensado para libros de 70 a 500 páginas. El archivo nunca sale de su equipo.</p>
+        <div id="drop" class="drop">
+          <p><b>Arrastre el documento aquí</b> o haga clic para elegir</p>
+          <p class="small muted">PDF · DOCX · TXT · MD · audio/vídeo (MP3, WAV, M4A, OGG, MP4, WEBM)</p>
+          <input id="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.markdown,.mp3,.wav,.m4a,.ogg,.oga,.flac,.mp4,.webm,.mov" class="hidden" />
+        </div>
+        <div id="loadInfo" class="row hidden" style="margin-top:14px"></div>
+      </div>
+      <div class="panel">
+        <h2>Metadatos del documento</h2>
+        <p class="help">Opcionales aquí; podrá completarlos/corregirlos en la ficha bibliográfica. Ayudan a generar mejores prompts.</p>
+        <div class="grid2">
+          <div><label class="fld">Título</label><input id="metaTitle" type="text" /></div>
+          <div><label class="fld">Autor</label><input id="metaAuthor" type="text" /></div>
+          <div><label class="fld">Año</label><input id="metaYear" type="text" /></div>
+          <div><label class="fld">Editorial</label><input id="metaPublisher" type="text" /></div>
+          <div><label class="fld">Materia principal</label><input id="metaSubject" type="text" placeholder="p. ej. Derecho Procesal Civil" /></div>
+          <div><label class="fld">Jurisdicción / país</label><input id="metaJuris" type="text" placeholder="p. ej. Chile" /></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1: EXTRACT -->
+    <div class="step hidden" data-step="1">
+      <div class="panel">
+        <h2>2 · Extracción, OCR y limpieza</h2>
+        <p class="help">El sistema extrae el texto automáticamente. Si el PDF es imagen (sin capa de texto) se aplica OCR local. Luego limpia encabezados/pies repetidos y normaliza el texto.</p>
+        <div class="row">
+          <button id="btnExtract" class="primary" disabled>Extraer texto</button>
+          <button id="btnCancelExtract" class="ghost hidden">Cancelar</button>
+          <label class="check"><input type="checkbox" id="optOcr"> Forzar OCR (PDF imagen)</label>
+          <label class="check" title="Mayor escala = más nitidez y más lento/memoria">OCR escala
+            <select id="ocrScale"><option value="1.5" selected>1.5×</option><option value="2">2×</option><option value="2.5">2.5×</option></select></label>
+          <span id="extractMode" class="muted small"></span>
+        </div>
+        <div style="margin-top:14px" class="progress" role="progressbar" aria-label="Progreso de extracción"><i id="extractBar"></i></div>
+        <div id="extractStatus" class="small muted" style="margin-top:6px" role="status" aria-live="polite"></div>
+      </div>
+      <div class="panel hidden" id="extractResult">
+        <h2>Texto extraído</h2>
+        <div class="row" style="margin-bottom:10px">
+          <span class="stat"><b id="stChars">0</b><span>caracteres</span></span>
+          <span class="stat"><b id="stWords">0</b><span>palabras</span></span>
+          <span class="stat"><b id="stPages">0</b><span>páginas (aprox.)</span></span>
+        </div>
+        <details><summary>Ver/editar texto extraído</summary>
+          <textarea id="extractedText" style="min-height:340px;margin-top:8px"></textarea>
+          <div class="row" style="margin-top:8px"><button id="btnSaveText" class="ghost">Guardar cambios de texto</button></div>
+        </details>
+      </div>
+    </div>
+
+    <!-- STEP 2: STRUCTURE / BLOCKS -->
+    <div class="step hidden" data-step="2">
+      <div class="panel">
+        <h2>3 · Detección de estructura y segmentación</h2>
+        <p class="help">Se detectan capítulos/títulos y se generan bloques. Los capítulos muy extensos se dividen automáticamente para que cada bloque entre cómodamente en una conversación de Claude/ChatGPT.</p>
+        <div class="row">
+          <label class="fld" style="margin:0">Tamaño máx. por bloque (caracteres)</label>
+          <input id="blockSize" type="number" value="14000" style="width:120px" />
+          <button id="btnSegment" class="primary">Detectar y segmentar</button>
+        </div>
+        <div id="structInfo" class="small muted" style="margin-top:10px"></div>
+      </div>
+      <div class="panel hidden" id="blocksPanel">
+        <h2>Bloques generados</h2>
+        <table class="blocks"><thead><tr><th>#</th><th>Capítulo / sección</th><th>Caracteres</th><th>Tokens aprox.</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="blocksTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- STEP 3: PROMPTS -->
+    <div class="step hidden" data-step="3">
+      <div class="panel">
+        <h2>4 · Prompts por bloque</h2>
+        <p class="help">Cada bloque contiene un <b>fragmento del documento</b> + instrucciones. El prompt está diseñado para obtener respuestas <b>extensas, concretas y específicas</b> (artículos, plazos, requisitos, definiciones y autores), no generales. El modo predeterminado pide usar toda la capacidad útil de salida mediante <b>artefacto/canvas</b>. Si el fragmento es <b>más grande de lo que admite el chat</b>, use <b>Modo adjunto</b>: descarga el texto como archivo, adjúntelo en Claude/ChatGPT y pegue solo el prompt.</p>
+        <div class="row">
+          <label class="fld" style="margin:0" for="promptBlockSel">Bloque</label>
+          <select id="promptBlockSel"></select>
+          <span id="promptMeta" class="muted small"></span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnCopyPromptFull" class="primary copybtn">Copiar prompt + texto</button>
+          <button id="btnCopyPromptOnly" class="ghost copybtn">Copiar solo instrucciones</button>
+          <button id="btnCopyBlockText" class="ghost copybtn">Copiar solo el fragmento</button>
+          <button id="btnExportAllPrompts" class="ghost copybtn">⬇ Descargar todos los prompts</button>
+          <label class="check" title="Agrupa bloques consecutivos en lotes bajo un presupuesto de caracteres, para pegar menos veces en libros largos">Lote (car.)
+            <input id="loteSize" type="number" value="24000" style="width:90px" /></label>
+          <button id="btnExportLotes" class="ghost copybtn">⬇ Descargar por lotes</button>
+          <span id="promptCopied" class="check ok hidden">✓ copiado</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnAttachPrompt" class="primary copybtn" title="Para fragmentos grandes: descarga el texto como archivo y copia solo el prompt; pegue el prompt en el chat y adjunte el archivo">📎 Modo adjunto (fragmento grande)</button>
+          <button id="btnDownloadFragment" class="ghost copybtn">⬇ Fragmento .txt</button>
+          <button id="btnDownloadFragmentMd" class="ghost copybtn">⬇ Fragmento .md</button>
+          <button id="btnExportAllFragments" class="ghost copybtn">⬇ Todos los fragmentos (.zip)</button>
+          <label class="check" title="Pide a Claude/ChatGPT entregar la respuesta como artefacto (Claude) o canvas (ChatGPT), usando la máxima extensión útil disponible"><input type="checkbox" id="optArtifact" checked> Pedir artefacto/canvas</label>
+          <label class="check" title="Nivel de detalle del análisis por bloque">Detalle:
+            <select id="promptDepth" style="width:auto;display:inline-block;margin-left:6px">
+              <option value="breve">Breve</option>
+              <option value="estandar">Estándar</option>
+              <option value="exhaustivo" selected>Exhaustivo</option>
+            </select>
+          </label>
+        </div>
+        <details open style="margin-top:12px"><summary>Fragmento del documento (editable; esto se enviará al modelo)</summary>
+          <textarea id="blockTextOut" style="min-height:260px;margin-top:8px"></textarea>
+          <div class="small muted" style="margin-top:6px">Editar este fragmento actualiza el prompt completo.</div>
+        </details>
+        <details open style="margin-top:8px"><summary>Prompt completo editable (instrucciones + fragmento)</summary>
+          <textarea id="promptOut" style="min-height:360px;margin-top:8px"></textarea>
+        </details>
+      </div>
+    </div>
+
+    <!-- STEP 4: PASTE RESPONSES -->
+    <div class="step hidden" data-step="4">
+      <div class="panel">
+        <h2>5 · Registrar respuestas parciales</h2>
+        <p class="help">Pegue la respuesta de Claude/ChatGPT para cada bloque. Se guarda automáticamente; podrá reanudar sin reprocesar lo ya completado.</p>
+        <div class="row"><span class="stat"><b id="stDone">0</b><span>respuestas</span></span><span class="stat"><b id="stTotal">0</b><span>bloques</span></span>
+          <div style="flex:1;min-width:200px"><div class="progress"><i id="respBar"></i></div></div></div>
+      </div>
+      <div id="respList"></div>
+    </div>
+
+    <!-- STEP 5: CONSOLIDATION -->
+    <div class="step hidden" data-step="5">
+      <div class="panel">
+        <h2>6 · Consolidación</h2>
+        <p class="help">Con las respuestas parciales el sistema arma un <b>prompt de consolidación</b> que pide a Claude/ChatGPT generar todos los productos en un formato estructurado. Copie el prompt, ejecútelo, y pegue la respuesta consolidada. En obras muy extensas la consolidación se divide automáticamente en <b>etapas</b> + un prompt de <b>fusión final</b>.</p>
+        <div id="consolStages"></div>
+        <div class="row">
+          <button id="btnCopyConsol" class="primary copybtn">Copiar prompt de consolidación</button>
+          <span id="consolCopied" class="check ok hidden">✓ copiado</span>
+        </div>
+        <details style="margin-top:10px"><summary>Ver prompt de consolidación</summary>
+          <pre class="out" id="consolOut"></pre></details>
+        <label class="fld">Pegue aquí la respuesta consolidada de Claude/ChatGPT</label>
+        <textarea id="consolResponse" style="min-height:220px"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="btnParseConsol" class="primary">Procesar consolidación →</button>
+          <span class="muted small">Se separan automáticamente los productos.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 6: PRODUCTS -->
+    <div class="step hidden" data-step="6">
+      <div class="panel">
+        <h2>7 · Productos finales</h2>
+        <p class="help">Productos derivados del documento. Las validaciones verifican los requisitos de la especificación.</p>
+        <div id="validation" class="row" style="margin-bottom:14px"></div>
+        <div id="productsView"></div>
+      </div>
+    </div>
+
+    <!-- STEP 7: EXPORT -->
+    <div class="step hidden" data-step="7">
+      <div class="panel">
+        <h2>8 · Exportar</h2>
+        <p class="help">Exporte el dossier completo. Todo se genera localmente sin librerías externas.</p>
+        <div id="exportChecklist" style="margin-bottom:14px"></div>
+        <div class="row">
+          <button id="btnExportMd" class="primary">⬇ Markdown (.md)</button>
+          <button id="btnExportDocx" class="primary">⬇ Word (.docx)</button>
+          <button id="btnExportObsidian" class="ghost">⬇ Nota Obsidian (.md)</button>
+          <button id="btnExportJson" class="ghost">⬇ Proyecto (.json)</button>
+        </div>
+        <p class="small muted" style="margin-top:12px">El .json permite respaldar/transferir el proyecto a otro equipo (Nuevo → Importar).</p>
+      </div>
+    </div>
+
+    <!-- STEP 8: RAG LOCAL -->
+    <div class="step hidden" data-step="8">
+      <div class="panel">
+        <h2>🔎 Consultar el documento (RAG local)</h2>
+        <p class="help">Búsqueda léxica local (BM25, sin red ni APIs) sobre el texto extraído. Escriba una pregunta; el sistema recupera los pasajes más relevantes y genera un <b>prompt acotado</b> para pegar en Claude/ChatGPT que responde <b>solo</b> con esos fragmentos (reduce alucinaciones y ahorra contexto en libros de 500 páginas).</p>
+        <div class="row">
+          <input id="ragQuery" type="text" placeholder="p. ej. ¿Qué requisitos exige para la prescripción extintiva?" style="flex:1;min-width:260px" />
+          <label class="check" title="Cuántos pasajes recuperar">Pasajes
+            <select id="ragK"><option>3</option><option selected>5</option><option>8</option></select></label>
+          <button id="btnRagSearch" class="primary">Buscar</button>
+        </div>
+        <div id="ragInfo" class="small muted" style="margin-top:8px"></div>
+        <div id="ragResults" style="margin-top:10px"></div>
+        <div id="ragPromptWrap" class="hidden" style="margin-top:12px">
+          <div class="row">
+            <button id="btnRagCopy" class="primary copybtn">Copiar prompt acotado</button>
+            <span id="ragCopied" class="check ok hidden">✓ copiado</span>
+          </div>
+          <details open style="margin-top:8px"><summary>Prompt acotado (pregunta + pasajes recuperados)</summary>
+            <textarea id="ragPrompt" style="min-height:240px;margin-top:8px"></textarea></details>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 9: CONCEPT GRAPH -->
+    <div class="step hidden" data-step="9">
+      <div class="panel">
+        <h2>🕸 Grafo conceptual</h2>
+        <p class="help">Grafo de co-ocurrencia entre los <b>conceptos clave</b> según cómo aparecen juntos en el resumen maestro. Se genera localmente (SVG, sin librerías). Requiere haber generado los productos (paso 7).</p>
+        <div class="row">
+          <label class="check" title="Fuerza mínima de co-ocurrencia para dibujar una arista">Umbral de enlace
+            <select id="graphMin"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select></label>
+          <button id="btnGraphBuild" class="primary">Generar grafo</button>
+          <button id="btnGraphSvg" class="ghost" disabled>⬇ Exportar SVG</button>
+        </div>
+        <div id="graphInfo" class="small muted" style="margin-top:8px"></div>
+        <div id="graphView" style="margin-top:10px;overflow:auto;background:#0d1117;color-scheme:dark;border:1px solid var(--line);border-radius:8px"></div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<!-- ============================ APP LOGIC ============================ -->
+<script>
+"use strict";
+/* ------------------------------------------------------------------ *
+ *  RJA — Resumidor Jurídico Asistido
+ *  Todo el procesamiento ocurre en el navegador. Sin APIs, sin nube.
+ * ------------------------------------------------------------------ */
+
+/* ---------- pequeñas utilidades ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const el = (t,a={},...kids)=>{const e=document.createElement(t);
+  for(const[k,v]of Object.entries(a)){if(k==='class')e.className=v;else if(k==='html')e.innerHTML=v;
+  else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v);}
+  for(const k of kids)e.append(k?.nodeType?k:document.createTextNode(k));return e;};
+function toast(msg,ms=2600){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');
+  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),ms);}
+function uid(){return 'p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function wc(s){return (s.trim().match(/\S+/g)||[]).length;}
+async function copy(text){try{await navigator.clipboard.writeText(text);return true;}
+  catch(e){const ta=el('textarea');ta.value=text;document.body.append(ta);ta.select();
+  try{document.execCommand('copy');}catch(_){}ta.remove();return true;}}
+
+/* ================================================================== *
+ *  STORAGE — IndexedDB. Guarda proyectos completos (resumible).
+ * ================================================================== */
+const DB = (()=>{
+  let dbp;
+  function open(){
+    if(dbp)return dbp;
+    dbp=new Promise((res,rej)=>{
+      const r=indexedDB.open('rja_db',1);
+      r.onupgradeneeded=()=>{const db=r.result;
+        if(!db.objectStoreNames.contains('projects'))db.createObjectStore('projects',{keyPath:'id'});};
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(mode,fn){const db=await open();return new Promise((res,rej)=>{
+    const t=db.transaction('projects',mode);const st=t.objectStore('projects');
+    const out=fn(st);t.oncomplete=()=>res(out?.result??out);t.onerror=()=>rej(t.error);});}
+  return {
+    put:(p)=>tx('readwrite',st=>st.put(p)),
+    get:(id)=>tx('readonly',st=>st.get(id)),
+    del:(id)=>tx('readwrite',st=>st.delete(id)),
+    all:()=>tx('readonly',st=>st.getAll()),
+  };
+})();
+
+/* ================================================================== *
+ *  STATE — proyecto en memoria + autosave con debounce.
+ * ================================================================== */
+function blankProject(){
+  return {
+    id:uid(), createdAt:Date.now(), updatedAt:Date.now(),
+    fileName:'', fileType:'', step:0,
+    meta:{title:'',author:'',year:'',publisher:'',edition:'',pages:'',subject:'',subsubjects:'',juris:''},
+    rawText:'', cleanText:'',
+    blocks:[],          // {id,index,chapter,text,response}
+    consolPartials:[],  // consolidaciones parciales (modo jerárquico)
+    consolResponse:'',
+    products:null,      // parsed products object
+  };
+}
+// Normaliza/saneа un proyecto importado o recuperado (defiende contra JSON
+// incompleto, tipos inesperados o `step` fuera de rango).
+function normalizeProject(data){
+  const base=blankProject();
+  const src=(data && typeof data==='object')?data:{};
+  const meta=(src.meta && typeof src.meta==='object')?src.meta:{};
+  const products=(src.products && typeof src.products==='object')?src.products:null;
+  // Solo claves conocidas: un JSON importado no puede inyectar campos ajenos
+  // al esquema (se descartan en vez de persistirse en IndexedDB).
+  return {
+    ...base,
+    id: typeof src.id==='string' && src.id ? src.id : uid(),
+    createdAt: Number.isFinite(src.createdAt)?src.createdAt:Date.now(),
+    updatedAt: Number.isFinite(src.updatedAt)?src.updatedAt:Date.now(),
+    fileName: typeof src.fileName==='string'?src.fileName:'',
+    fileType: typeof src.fileType==='string'?src.fileType:'',
+    step: Math.max(0,Math.min(7,Number(src.step)||0)),
+    meta: {...base.meta,...meta},
+    rawText: typeof src.rawText==='string'?src.rawText:'',
+    cleanText: typeof src.cleanText==='string'?src.cleanText:'',
+    blocks: Array.isArray(src.blocks)?src.blocks.map((b,i)=>({
+      id: typeof b?.id==='string'?b.id:'b'+i,
+      index: Number(b?.index)||i+1,
+      chapter: typeof b?.chapter==='string'?b.chapter:`Bloque ${i+1}`,
+      text: typeof b?.text==='string'?b.text:'',
+      response: typeof b?.response==='string'?b.response:''
+    })):[],
+    consolPartials: Array.isArray(src.consolPartials)?src.consolPartials.map(x=>typeof x==='string'?x:''):[],
+    consolResponse: typeof src.consolResponse==='string'?src.consolResponse:'',
+    products
+  };
+}
+let P = blankProject();
+let saveTimer=null;
+// Autosave con debounce; serializa una sola vez y omite la escritura si el
+// contenido no cambió (evita stringify+IndexedDB redundantes con libros grandes).
+function touch(){P.updatedAt=Date.now();clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    const upd=P.updatedAt;P.updatedAt=0;
+    const body=JSON.stringify(P);
+    P.updatedAt=upd;
+    if(body===touch._last)return;
+    const data=JSON.parse(body);data.updatedAt=upd;
+    DB.put(data)
+      .then(()=>{touch._last=body;const s=$('#saveStatus');if(s)s.textContent='Guardado '+new Date().toLocaleTimeString('es');})
+      .catch(()=>{const s=$('#saveStatus');if(s)s.textContent='⚠ Sin persistencia: este navegador bloquea el almacenamiento local en file://. Use un servidor local o exporte el .json. El proyecto sigue en memoria.';});
+  },1000);}
+function structuredCloneSafe(o){return JSON.parse(JSON.stringify(o));}
+function setProjName(){$('#projName').textContent=P.meta.title||P.fileName||'Proyecto sin título';}
+
+/* ================================================================== *
+ *  WIZARD / NAV
+ * ================================================================== */
+let current=0;
+function gotoStep(n){
+  current=n; if(n<=7)P.step=Math.max(P.step,n); touch();   // 8/9 son herramientas, no avanzan el progreso
+  $$('.step').forEach(s=>s.classList.toggle('hidden',+s.dataset.step!==n));
+  $$('#stepNav li, #toolNav li').forEach(li=>{
+    const i=+li.dataset.step;
+    li.classList.toggle('active',i===n);
+    li.classList.toggle('done', i<=7 && ((i<P.step && i!==n) || (i<n && n<=7)));
+  });
+  updateNavBadges();
+  if(n===3)renderPrompts();
+  if(n===4)renderResponses();
+  if(n===5)renderConsolidation();
+  if(n===6)renderProducts();
+  if(n===7)renderExportChecklist();
+  if(n===8)renderRag();
+  if(n===9)renderGraph();
+}
+// Badges de progreso en la navegación: nº de bloques (paso 4) y X/N respuestas (paso 5).
+function updateNavBadges(){
+  const set=(step,txt)=>{
+    const li=$(`#stepNav li[data-step="${step}"]`);if(!li)return;
+    let b=li.querySelector('.navbadge');
+    if(!txt){if(b)b.remove();return;}
+    if(!b){b=el('span',{class:'navbadge'});li.append(b);}
+    b.textContent=txt;
+  };
+  set(3,P.blocks.length?String(P.blocks.length):'');
+  const done=P.blocks.filter(b=>b.response?.trim()).length;
+  set(4,P.blocks.length?`${done}/${P.blocks.length}`:'');
+}
+function canEnterStep(n){
+  if(n>=1 && !P.fileName && !P.cleanText && !P.rawText)return false;
+  if(n>=2 && !(P.cleanText||P.rawText))return false;
+  if((n===3||n===4||n===5) && !P.blocks.length)return false;
+  if((n===6||n===7) && !P.products)return false;
+  if(n===8 && !(P.cleanText||P.rawText))return false;  // RAG sólo necesita texto
+  if(n===9 && !P.products)return false;                // grafo necesita productos
+  return true;
+}
+$$('#stepNav li, #toolNav li').forEach(li=>li.addEventListener('click',()=>{
+  const n=+li.dataset.step;
+  if(!canEnterStep(n)){toast('Complete primero los pasos anteriores');return;}
+  gotoStep(n);
+}));
+
+/* ================================================================== *
+ *  STEP 0 — carga de archivo
+ * ================================================================== */
+const drop=$('#drop'), fileInput=$('#fileInput');
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hover');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('hover');
+  if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+let fileBuffer=null; // ArrayBuffer del archivo actual (para extracción)
+async function loadFile(file){
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['pdf','docx','txt','md','markdown'].includes(ext) && !AUDIO_EXT.has(ext)){toast('Formato no soportado');return;}
+  if(file.size>50*1024*1024){
+    if(!confirm(`El archivo pesa ${(file.size/1048576).toFixed(0)} MB. Procesarlo (y el OCR) puede consumir mucha memoria y tardar. ¿Continuar?`))return;
+  }
+  // cargar otro archivo invalida todo lo derivado del anterior (bloques,
+  // respuestas, consolidación y productos); avisar si había trabajo hecho
+  const hadWork=P.blocks.some(b=>b.response?.trim())||!!P.consolResponse.trim()||!!P.products;
+  if(hadWork && !confirm('Cargar otro archivo descartará los bloques, respuestas, consolidación y productos del documento actual (el proyecto guardado no se toca hasta el próximo guardado). ¿Continuar?'))return;
+  fileBuffer=await file.arrayBuffer();
+  $('#btnExtract').disabled=false;
+  P.fileName=file.name; P.fileType=ext; P.rawText=''; P.cleanText=''; P.blocks=[];
+  P.consolPartials=[]; P.consolResponse=''; P.products=null; P.step=0;
+  if(!P.meta.title)P.meta.title=file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');
+  $('#metaTitle').value=P.meta.title;
+  $('#loadInfo').classList.remove('hidden');
+  const goExtract=el('button',{class:'primary',onclick:()=>gotoStep(1)},'Continuar a extracción →');
+  $('#loadInfo').replaceChildren(
+    el('span',{class:'pill done'},'✓ ',file.name),
+    el('span',{class:'muted small'},`${(file.size/1024).toFixed(0)} KB · ${ext.toUpperCase()}`),
+    goExtract
+  );
+  setProjName(); touch();
+  toast('Archivo cargado');
+}
+// meta inputs
+const metaMap={metaTitle:'title',metaAuthor:'author',metaYear:'year',metaPublisher:'publisher',metaSubject:'subject',metaJuris:'juris'};
+for(const[id,key]of Object.entries(metaMap)){
+  const e=$('#'+id); if(!e)continue;
+  e.addEventListener('input',()=>{P.meta[key]=e.value;setProjName();touch();});
+}
+
+/* ================================================================== *
+ *  STEP 1 — extracción (PDF/DOCX/TXT/MD) + OCR + limpieza
+ * ================================================================== */
+// Cambie a true (o defina window.RJA_LOCAL_VENDOR=true) para cargar las
+// librerías desde la carpeta local ./vendor/ en lugar del CDN. Útil para uso
+// 100% offline o en contextos sensibles (no ejecuta código remoto).
+const USE_LOCAL_VENDOR = (typeof window!=='undefined' && window.RJA_LOCAL_VENDOR===true);
+const REMOTE = {
+  pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  pdfWorker:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+  mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+  transformers:'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2',
+};
+const VENDOR = {
+  pdf:'vendor/pdf.min.js', pdfWorker:'vendor/pdf.worker.min.js',
+  tesseract:'vendor/tesseract.min.js', mammoth:'vendor/mammoth.browser.min.js',
+  transformers:'vendor/transformers.min.js',
+};
+const CDN = USE_LOCAL_VENDOR ? VENDOR : REMOTE;
+// Verificación de integridad (Subresource Integrity). Vacío por defecto a
+// propósito: en modo CDN NO se fija integrity, porque un hash incorrecto
+// rompería la carga. Para activarlo SIN editar código, defina antes del script:
+//   <script>window.RJA_SRI = { '<url-cdn>':'sha384-…' }<\/script>
+// La herramienta «⚙ Offline/SRI» calcula estos hashes en su propio equipo.
+const SRI = Object.assign({}, (typeof window!=='undefined' && window.RJA_SRI) || {});
+function loadScript(src){return new Promise((res,rej)=>{
+  // comparar en absoluto: script.src siempre devuelve URL absoluta y las
+  // rutas vendor/ son relativas (sin esto, el modo vendor re-inyecta la librería)
+  const abs=new URL(src,location.href).href;
+  if([...document.scripts].some(s=>s.src===abs))return res();
+  const attrs={src};
+  if(!USE_LOCAL_VENDOR){                 // SRI/CORS sólo aplican a recursos remotos
+    attrs.crossorigin='anonymous';
+    if(SRI[src])attrs.integrity=SRI[src];
+  }
+  const s=el('script',attrs);s.onload=res;s.onerror=()=>rej(new Error('No se pudo cargar '+src));
+  document.head.append(s);});}
+function markCap(id,ok){const node=$(id);if(!node)return;
+  node.classList.toggle('ok',!!ok);node.classList.toggle('off',!ok);}
+// Carga perezosa REAL: las librerías se descargan sólo cuando se usan (no al iniciar).
+// Las insignias PDF/OCR/DOCX se encienden al primer uso exitoso.
+async function ensurePdf(){await loadScript(CDN.pdf);
+  if(window.pdfjsLib)window.pdfjsLib.GlobalWorkerOptions.workerSrc=CDN.pdfWorker;
+  markCap('#capPdf',!!window.pdfjsLib);return window.pdfjsLib;}
+async function ensureMammoth(){await loadScript(CDN.mammoth);
+  markCap('#capDocx',!!window.mammoth);return window.mammoth;}
+async function ensureTesseract(){await loadScript(CDN.tesseract);
+  markCap('#capOcr',!!window.Tesseract);return window.Tesseract;}
+// Whisper local vía transformers.js (módulo ESM). El modelo se descarga una
+// sola vez (la primera transcripción) y queda cacheado por el navegador.
+const AUDIO_EXT=new Set(['mp3','wav','m4a','ogg','oga','flac','mp4','webm','mov']);
+let whisperPipe=null;
+async function ensureWhisper(progressCb){
+  if(whisperPipe)return whisperPipe;
+  const mod=await import(/* webpackIgnore: true */ CDN.transformers);
+  if(mod.env)mod.env.allowLocalModels=USE_LOCAL_VENDOR;   // en modo vendor, modelos locales
+  whisperPipe=await mod.pipeline('automatic-speech-recognition','Xenova/whisper-tiny',
+    {progress_callback:progressCb});
+  return whisperPipe;
+}
+// Decodifica cualquier audio/vídeo soportado por el navegador a PCM mono 16 kHz.
+async function decodeAudioTo16k(arrayBuffer){
+  const AC=window.AudioContext||window.webkitAudioContext;
+  const ctx=new AC();
+  const decoded=await ctx.decodeAudioData(arrayBuffer.slice(0));
+  if(ctx.close)ctx.close();
+  const off=new OfflineAudioContext(1,Math.max(1,Math.ceil(decoded.duration*16000)),16000);
+  const src=off.createBufferSource();src.buffer=decoded;src.connect(off.destination);src.start();
+  const rendered=await off.startRendering();
+  return rendered.getChannelData(0);
+}
+async function transcribeAudio(){
+  setExtractStatus('Cargando modelo Whisper (descarga única la primera vez)…');
+  const pipe=await ensureWhisper(p=>{
+    if(p&&p.status==='progress'&&p.progress!=null)
+      setExtractStatus(`Descargando modelo Whisper… ${Math.round(p.progress)}%`);
+  });
+  throwIfCancelled();
+  setExtractStatus('Decodificando audio…');setBar('#extractBar',40);
+  const pcm=await decodeAudioTo16k(fileBuffer);
+  throwIfCancelled();
+  setExtractStatus('Transcribiendo… (puede tardar varios minutos según la duración)');
+  setBar('#extractBar',60);
+  const out=await pipe(pcm,{chunk_length_s:30,stride_length_s:5,language:'spanish',task:'transcribe'});
+  setBar('#extractBar',95);
+  return ((out&&out.text)||'').trim();
+}
+
+function setBar(id,pct){const n=$(id);pct=Math.max(0,Math.min(100,pct));
+  n.style.width=pct+'%';
+  const bar=n.parentElement;
+  if(bar&&bar.setAttribute){bar.setAttribute('aria-valuenow',Math.round(pct));
+    bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');}}
+function setExtractStatus(t){$('#extractStatus').textContent=t;}
+
+let extractCancel=false, extracting=false;
+function requireFileBuffer(){
+  if(fileBuffer)return true;
+  toast('Reabra el archivo original (paso 1) para volver a extraer texto');
+  return false;
+}
+$('#btnExtract').addEventListener('click',extract);
+$('#btnCancelExtract').addEventListener('click',()=>{extractCancel=true;setExtractStatus('Cancelando…');});
+async function extract(){
+  if(!requireFileBuffer())return;
+  if(extracting)return;
+  extracting=true; extractCancel=false;
+  $('#btnExtract').disabled=true; $('#btnCancelExtract').classList.remove('hidden');
+  const forceOcr=$('#optOcr').checked;
+  setBar('#extractBar',2); setExtractStatus('Iniciando…');
+  let text='';
+  try{
+    if(P.fileType==='txt'||P.fileType==='md'||P.fileType==='markdown'){
+      text=new TextDecoder('utf-8').decode(fileBuffer); $('#extractMode').textContent='Texto plano';
+      setBar('#extractBar',80);
+    }else if(P.fileType==='docx'){
+      $('#extractMode').textContent='DOCX (mammoth)';
+      const m=await ensureMammoth();
+      const r=await m.extractRawText({arrayBuffer:fileBuffer});
+      text=r.value; setBar('#extractBar',80);
+    }else if(P.fileType==='pdf'){
+      text=await extractPdf(forceOcr);
+    }else if(AUDIO_EXT.has(P.fileType)){
+      $('#extractMode').textContent='Audio/vídeo → transcripción Whisper (local)';
+      text=await transcribeAudio();
+    }
+  }catch(err){
+    console.error(err);
+    const msg=err&&err.message==='cancelado'
+      ? 'Extracción cancelada. Puede reintentar o pegar el texto manualmente abajo.'
+      : 'Error de extracción: '+(err?.message||err)+'. Si está sin conexión, vea README (vendorizado) o pegue el texto manualmente abajo.';
+    setExtractStatus(msg);
+    $('#extractResult').classList.remove('hidden');
+    return;
+  }finally{
+    extracting=false; $('#btnExtract').disabled=false; $('#btnCancelExtract').classList.add('hidden');
+  }
+  P.rawText=text;
+  P.cleanText=cleanText(text);
+  setBar('#extractBar',100); setExtractStatus('Listo. Texto extraído y limpiado.');
+  showExtractResult();
+  touch();
+}
+function throwIfCancelled(){if(extractCancel)throw new Error('cancelado');}
+
+async function extractPdf(forceOcr){
+  const pdfjs=await ensurePdf();
+  const pdf=await pdfjs.getDocument({data:fileBuffer.slice(0)}).promise;
+  const n=pdf.numPages; let out=[]; let textChars=0;
+  for(let i=1;i<=n;i++){
+    throwIfCancelled();
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    const pageText=tc.items.map(it=>it.str).join(' ');
+    textChars+=pageText.length;
+    out.push(pageText);
+    setBar('#extractBar',(i/n)*70);
+    setExtractStatus(`Extrayendo texto… página ${i}/${n}`);
+  }
+  let joined=out.join('\n\n');
+  const avgPerPage=textChars/n;
+  const needsOcr=forceOcr || avgPerPage<40; // PDF imagen
+  if(needsOcr){
+    $('#extractMode').textContent='PDF imagen → OCR local (tesseract)';
+    setExtractStatus('PDF sin capa de texto. Aplicando OCR local (puede tardar)…');
+    joined=await ocrPdf(pdf,n);
+  }else{
+    $('#extractMode').textContent='PDF con capa de texto';
+  }
+  return joined;
+}
+
+async function ocrPdf(pdf,n){
+  const T=await ensureTesseract();
+  const scale=parseFloat($('#ocrScale').value)||1.5;
+  const worker=await T.createWorker('spa+eng');
+  let out=[];
+  try{
+    for(let i=1;i<=n;i++){
+      throwIfCancelled();
+      const page=await pdf.getPage(i);
+      const viewport=page.getViewport({scale});
+      const canvas=el('canvas'); canvas.width=viewport.width; canvas.height=viewport.height;
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      const {data}=await worker.recognize(canvas);
+      out.push(data.text);
+      canvas.width=canvas.height=0;        // liberar memoria del canvas
+      setBar('#extractBar',(i/n)*100);
+      setExtractStatus(`OCR… página ${i}/${n}`);
+    }
+  }finally{
+    await worker.terminate();
+  }
+  return out.join('\n\n');
+}
+
+// limpieza: quita encabezados/pies repetidos, números de página sueltos, espacios.
+function cleanText(t){
+  let lines=t.split(/\r?\n/);
+  // contar líneas cortas repetidas (encabezados/pies)
+  const freq={};
+  for(const l of lines){const k=l.trim();if(k.length>0&&k.length<70)freq[k]=(freq[k]||0)+1;}
+  const repeated=new Set(Object.entries(freq).filter(([k,v])=>v>=4&&k.length<70).map(([k])=>k));
+  lines=lines.filter(l=>{
+    const k=l.trim();
+    if(!k)return true;
+    if(/^\d{1,4}$/.test(k))return false;            // número de página suelto
+    if(repeated.has(k)&&k.length<60)return false;    // encabezado/pie recurrente
+    return true;
+  });
+  let out=lines.join('\n');
+  out=out.replace(/-\n([a-z0-9áéíóúüñ])/gi,'$1');    // guiones de corte de palabra (incl. acentos/ñ)
+  out=out.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').replace(/[ \t]{2,}/g,' ');
+  return out.trim();
+}
+
+function showExtractResult(){
+  $('#extractResult').classList.remove('hidden');
+  const t=P.cleanText||P.rawText;
+  $('#extractedText').value=t;
+  $('#stChars').textContent=t.length.toLocaleString('es');
+  $('#stWords').textContent=wc(t).toLocaleString('es');
+  const pages=Math.max(1,Math.round(wc(t)/450));
+  $('#stPages').textContent=pages;
+  if(!P.meta.pages)P.meta.pages=String(pages);
+  if(!$('#goSegment')){
+    $('#extractResult').append(el('div',{class:'row',style:'margin-top:12px'},
+      el('button',{class:'primary',id:'goSegment',onclick:()=>gotoStep(2)},'Continuar a estructura →')));
+  }
+}
+$('#btnSaveText').addEventListener('click',()=>{
+  P.cleanText=$('#extractedText').value;P.rawText=P.rawText||P.cleanText;
+  showExtractResult();touch();toast('Texto guardado');});
+
+/* ================================================================== *
+ *  STEP 2 — detección de estructura + segmentación en bloques
+ * ================================================================== */
+$('#btnSegment').addEventListener('click',segment);
+
+const CHAP_RE=new RegExp(
+  '^\\s*((?:CAP[IÍ]TULO|Cap[ií]tulo|T[IÍ]TULO|T[ií]tulo|SECCI[OÓ]N|Secci[oó]n|PARTE|Parte|LIBRO|Libro)'+
+  '\\s+(?:[IVXLCDM]+|\\d+|[A-ZÁÉÍ]+|primero|segundo|tercero|cuarto|quinto|sexto|s[eé]ptimo|octavo|noveno|d[eé]cimo)\\b.*)$'
+  ,'i');
+
+function detectChapters(text){
+  const lines=text.split(/\n/);
+  const heads=[];
+  for(let i=0;i<lines.length;i++){
+    const ln=lines[i].trim();
+    if(ln.length===0||ln.length>90)continue;
+    if(CHAP_RE.test(ln)){heads.push({line:i,title:ln});}
+  }
+  return heads;
+}
+
+function segment(){
+  const text=P.cleanText||P.rawText;
+  if(!text){toast('Primero extraiga el texto');return;}
+  const maxSize=Math.max(4000,+$('#blockSize').value||14000);
+  const lines=text.split(/\n/);
+  const heads=detectChapters(text);
+  let segments=[];
+  if(heads.length>=2){
+    for(let h=0;h<heads.length;h++){
+      const start=heads[h].line;
+      const end=h+1<heads.length?heads[h+1].line:lines.length;
+      segments.push({chapter:heads[h].title,text:lines.slice(start,end).join('\n').trim()});
+    }
+    // texto previo al primer capítulo (prólogo/portada)
+    if(heads[0].line>0){
+      const pre=lines.slice(0,heads[0].line).join('\n').trim();
+      if(wc(pre)>30)segments.unshift({chapter:'Preliminares / Introducción',text:pre});
+    }
+  }else{
+    // sin capítulos detectables: dividir por tamaño
+    segments=[{chapter:'Documento completo',text}];
+  }
+  // dividir segmentos grandes en sub-bloques por tamaño (respetando párrafos)
+  const blocks=[];
+  for(const seg of segments){
+    if(seg.text.length<=maxSize){blocks.push(seg);continue;}
+    const paras=seg.text.split(/\n\n+/);
+    let buf='',part=1;
+    const flush=()=>{if(buf.trim()){blocks.push({chapter:`${seg.chapter} — parte ${part}`,text:buf.trim()});buf='';part++;}};
+    for(const p of paras){
+      if((buf.length+p.length)>maxSize&&buf){flush();}
+      buf+=(buf?'\n\n':'')+p;
+      while(buf.length>maxSize*1.4){ // párrafo gigante: corte duro
+        blocks.push({chapter:`${seg.chapter} — parte ${part}`,text:buf.slice(0,maxSize)});
+        buf=buf.slice(maxSize);part++;
+      }
+    }
+    flush();
+  }
+  // preservar respuestas previas si re-segmentamos y el conteo coincide;
+  // si alguna respuesta no sobrevive al nuevo corte, pedir confirmación antes
+  const prev=P.blocks;
+  const nuevo=blocks.map((b,i)=>({
+    id:'b'+i,index:i+1,chapter:b.chapter,text:b.text,
+    response: (prev[i]&&prev[i].chapter===b.chapter)?prev[i].response:''
+  }));
+  const perdidas=prev.filter(b=>b.response?.trim()).length
+    - nuevo.filter(b=>b.response?.trim()).length;
+  if(perdidas>0 && !confirm(`La nueva segmentación descartaría ${perdidas} respuesta(s) ya pegada(s) (los capítulos/cortes cambiaron). ¿Continuar?`))return;
+  P.blocks=nuevo;
+  renderBlocks();
+  $('#structInfo').innerHTML=`Capítulos detectados: <b>${heads.length}</b> · Bloques generados: <b>${P.blocks.length}</b>`;
+  touch();
+}
+
+function renderBlocks(){
+  $('#blocksPanel').classList.remove('hidden');
+  const tb=$('#blocksTable');tb.innerHTML='';
+  for(const b of P.blocks){
+    const preview=el('tr',{class:'hidden'},el('td',{colspan:'6'},
+      el('pre',{class:'out',style:'max-height:200px;margin:0'},b.text.slice(0,2000)+(b.text.length>2000?'\n…':''))));
+    const btnVer=el('button',{class:'ghost copybtn',onclick:()=>preview.classList.toggle('hidden')},'Ver fragmento');
+    tb.append(el('tr',{},
+      el('td',{},String(b.index)),
+      el('td',{},b.chapter),
+      el('td',{},b.text.length.toLocaleString('es')),
+      el('td',{},'~'+approxTokens(b.text).toLocaleString('es')),
+      el('td',{},el('span',{class:'pill '+(b.response?'done':'pend')},b.response?'✓ respondido':'pendiente')),
+      el('td',{},btnVer)
+    ));
+    tb.append(preview);
+  }
+  if(!$('#goPrompts')){
+    $('#blocksPanel').append(el('div',{class:'row',style:'margin-top:12px'},
+      el('button',{class:'primary',id:'goPrompts',onclick:()=>gotoStep(3)},'Continuar a prompts →')));
+  }
+}
+
+/* ================================================================== *
+ *  STEP 3 — prompts por bloque
+ * ================================================================== */
+function approxTokens(s){return Math.ceil((s||'').length/4);}  // estimación gruesa
+// Nota opcional para pedir la respuesta como artefacto/canvas (más larga y completa).
+function artifactNote(){
+  return ($('#optArtifact')&&$('#optArtifact').checked)
+    ? `\n\nFORMATO DE ENTREGA: entrega la respuesta como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown, como documento jurídico extenso y completo. Usa toda la capacidad útil de salida disponible: desarrolla secciones amplias, tablas si ayudan y listas completas. No la abrevies ni la recortes para que "quepa" en el chat; si el sistema limita la extensión, prioriza terminar el análisis completo del bloque antes que resumirlo en términos generales.`
+    : '';
+}
+function blockInstructions(b,depthOverride){
+  const m=P.meta;
+  const ctx=[m.title&&`Obra: "${m.title}"`,m.author&&`Autor: ${m.author}`,
+    m.subject&&`Materia: ${m.subject}`,m.juris&&`Jurisdicción: ${m.juris}`].filter(Boolean).join(' · ');
+  const depth=depthOverride||(($('#promptDepth')&&$('#promptDepth').value)||'exhaustivo');
+  const capacidad={
+    breve:`EXTENSIÓN Y PROFUNDIDAD: aunque esta sea una pasada breve, no sacrifiques datos concretos. Usa el espacio necesario para cubrir todos los artículos, requisitos, definiciones, plazos, autores y excepciones que aparezcan. No impongas un número fijo de líneas.`,
+    estandar:`EXTENSIÓN Y PROFUNDIDAD: usa toda la capacidad útil de salida disponible para que el bloque pueda estudiarse sin volver al original. No te autolimites a un número de líneas: desarrolla tantos párrafos, viñetas, tablas y subapartados como hagan falta para cubrir cada idea concreta del fragmento.`,
+    exhaustivo:`EXTENSIÓN MÁXIMA: usa toda la capacidad útil de salida disponible. Trata este bloque como un informe jurídico autosuficiente: cubre cada norma, requisito, definición, postura, cita, excepción, distinción y matiz presente en el texto. Si el bloque es largo, subdivide por temas y agota el análisis antes de cerrar.`
+  }[depth]||'';
+
+  const reglas=`REGLAS DE ESPECIFICIDAD (obligatorias):
+1. Prohibido el lenguaje vago o de relleno ("trata sobre", "aborda diversos aspectos", "entre otros", "en general", "varios"). Si lo usas, reescríbelo con el dato concreto.
+2. Cita de forma exacta TODO lo que el texto mencione: artículos, incisos, numerales, leyes, plazos, montos, requisitos, autores, sentencias o tribunales, con su numeración literal.
+3. Reproduce las definiciones jurídicas con su contenido esencial (no escribas "define la prescripción", escribe la definición).
+4. Si el texto enumera requisitos, elementos, efectos o excepciones, enuméralos TODOS y por separado; nunca como "varios" o "ciertos".
+5. Atribuye cada postura doctrinal a su autor y cada criterio a su tribunal/sentencia.
+6. No inventes ni añadas información ajena al bloque. Si algo no aparece, omítelo (no rellenes).
+7. La respuesta debe ser concreta incluso cuando el bloque sea largo: no sustituyas el contenido por fórmulas como "se examinan diversos requisitos"; escribe cuáles son.`;
+
+  const citasTextuales=`8. CITAS TEXTUALES: cuando el texto incluya una definición, principio o afirmación relevante, transcríbela de forma literal entre comillas, indicando el número de página si aparece en el texto (ej: "La prescripción extingue…" — p. 134).`;
+
+  if(depth==='breve'){
+    return `Eres un jurista experto. Analiza el siguiente bloque de una obra jurídica y entrega un resumen BREVE Y ESPECÍFICO.
+
+${ctx?`Contexto: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${capacidad}
+
+${reglas}
+
+Responde con este formato:
+
+### CAPÍTULO
+${b.chapter}
+
+### SÍNTESIS
+(síntesis selectiva, pero concreta: artículos, plazos, requisitos, definiciones y autores exactos del bloque; si hay muchos datos, enuméralos antes que generalizar)
+
+### CONCEPTOS
+- (uno por línea)
+
+### PALABRAS CLAVE
+(separadas por comas)`+artifactNote();
+  }
+
+  if(depth==='exhaustivo'){
+    return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un análisis EXHAUSTIVO, ESPECÍFICO Y DETALLADO, con citas textuales.
+
+${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${capacidad}
+
+${reglas}
+${citasTextuales}
+9. Para cada norma citada, explica su estructura lógica completa: supuesto de hecho → consecuencia jurídica → excepciones.
+10. Para cada concepto, da: (a) definición según el texto, (b) elementos esenciales, (c) distinción de figuras afines si el texto las menciona.
+
+Responde EXACTAMENTE con este formato:
+
+### CAPÍTULO
+${b.chapter}
+
+### ANÁLISIS EXHAUSTIVO
+(desarrolla cada idea con todos sus elementos, artículos, plazos y matices. Usa la máxima extensión útil disponible; no cierres hasta haber cubierto todas las normas, requisitos, excepciones, definiciones, autores, citas y distinciones presentes en el bloque. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece.)
+
+### DEFINICIONES Y CONCEPTOS
+- término — definición literal del texto + elementos esenciales + distinción de figuras afines (si las hay)
+
+### NORMAS, REQUISITOS Y PLAZOS
+- artículo/regla — supuesto de hecho | consecuencia | excepción (toda la información del texto, con numeración exacta)
+
+### CITAS TEXTUALES RELEVANTES
+- "cita literal" — (p. XX si figura) — por qué es relevante
+
+### POSTURAS DOCTRINALES Y JURISPRUDENCIA
+- autor o tribunal — tesis/criterio completo
+
+### ESTRUCTURA ARGUMENTAL
+(Cómo el autor construye el argumento en este bloque: premisas → desarrollo → conclusión)
+
+### PUNTOS CLAVE
+- (tantas viñetas como sean necesarias para cubrir todos los argumentos centrales, concretos)
+
+### CONCEPTOS
+- (todos los conceptos jurídicos del bloque, uno por línea)
+
+### PALABRAS CLAVE
+(términos separados por comas, útiles para clasificación)`+artifactNote();
+  }
+
+  // estandar
+  return `Eres un jurista experto en dogmática y análisis doctrinal. Vas a analizar UN bloque de una obra jurídica extensa procesada por partes. Tu objetivo es un resumen ESPECÍFICO Y DETALLADO, NO un resumen general.
+
+${ctx?`Contexto de la obra: ${ctx}\n`:''}Bloque ${b.index} de ${P.blocks.length} — ${b.chapter}
+
+${capacidad}
+
+${reglas}
+${citasTextuales}
+
+Responde EXACTAMENTE con este formato (respeta los encabezados):
+
+### CAPÍTULO
+${b.chapter}
+
+### RESUMEN DETALLADO
+(denso, fiel y ESPECÍFICO: usa toda la capacidad útil de salida para desarrollar ideas concretas con sus artículos, plazos, requisitos y matices, siguiendo el orden argumental del texto. Incluye citas textuales literales del texto cuando sean relevantes, con página si aparece. Cada idea debe entenderse sin leer el original.)
+
+### DEFINICIONES
+- término — definición esencial tal como la da el texto (todas las que aparezcan)
+
+### NORMAS, REQUISITOS Y PLAZOS
+- (cada artículo/regla/requisito/plazo citado, uno por línea, con su numeración exacta; si no hay, escribe "No se citan en este bloque")
+
+### CITAS TEXTUALES
+- "cita literal" — (p. XX si figura) — relevancia
+
+### POSTURAS DOCTRINALES Y JURISPRUDENCIA
+- autor o tribunal — tesis/criterio (si no hay, escribe "No se citan en este bloque")
+
+### PUNTOS CLAVE
+- (tantas viñetas como sean necesarias para cubrir los argumentos centrales, concretos)
+
+### CONCEPTOS
+- (conceptos jurídicos del bloque, uno por línea)
+
+### PALABRAS CLAVE
+(términos separados por comas, útiles para clasificación)`+artifactNote();
+}
+function blockPrompt(b){
+  return `${blockInstructions(b)}
+
+--- TEXTO DEL BLOQUE ---
+${b.text}
+--- FIN DEL TEXTO ---`;
+}
+// Para fragmentos más grandes que el cuadro de chat: se descarga el texto como
+// archivo y se pega solo el prompt, indicando que el texto va adjunto.
+function fragmentContent(b,md){
+  const head=md?`# Bloque ${b.index} — ${b.chapter}\n\n`:`BLOQUE ${b.index} — ${b.chapter}\n\n`;
+  return head+(b.text||'');
+}
+function fragmentFileName(b,ext){return safeName()+`_bloque_${String(b.index).padStart(2,'0')}.${ext}`;}
+function attachNote(b){
+  return `\n\n📎 IMPORTANTE: el TEXTO DEL BLOQUE ${b.index} se entrega como ARCHIVO ADJUNTO a este mensaje (no está pegado aquí por su tamaño). Analízalo íntegramente desde el adjunto y aplica las instrucciones anteriores.`;
+}
+function downloadFragment(b,md){
+  download(fragmentFileName(b,md?'md':'txt'),
+    new Blob([fragmentContent(b,md)],{type:md?'text/markdown':'text/plain'}));
+}
+function selectedBlock(){return P.blocks.find(x=>x.id===$('#promptBlockSel').value)||P.blocks[0];}
+
+function renderPrompts(){
+  const sel=$('#promptBlockSel');sel.innerHTML='';
+  if(!P.blocks.length){
+    $('#blockTextOut').value='No hay bloques. Vuelva al paso 3 y pulse "Detectar y segmentar".';
+    $('#promptOut').value='';$('#promptMeta').textContent='';return;
+  }
+  P.blocks.forEach(b=>sel.append(el('option',{value:b.id},`Bloque ${b.index} · ${b.chapter.slice(0,40)}`)));
+  sel.onchange=showPrompt; showPrompt();
+}
+function showPrompt(){
+  const b=selectedBlock(); if(!b)return;
+  $('#blockTextOut').value=b.text;
+  $('#promptOut').value=blockPrompt(b);
+  $('#promptMeta').textContent=`${b.text.length.toLocaleString('es')} caracteres · ~${approxTokens(blockPrompt(b)).toLocaleString('es')} tokens (estimado)`;
+}
+// El fragmento es editable: al corregirlo (quitar basura, ajustar el corte) se
+// actualiza P.blocks[n].text y se regenera el prompt completo.
+function syncPromptEditor(){
+  const b=selectedBlock(); if(!b)return null;
+  const txt=$('#blockTextOut').value;
+  if(txt!==b.text){
+    b.text=txt;
+    $('#promptOut').value=blockPrompt(b);
+    $('#promptMeta').textContent=`${b.text.length.toLocaleString('es')} caracteres · ~${approxTokens($('#promptOut').value).toLocaleString('es')} tokens (estimado)`;
+    touch();
+  }
+  return b;
+}
+$('#blockTextOut').addEventListener('input',syncPromptEditor);
+$('#promptOut').addEventListener('input',()=>{touch();});
+function flashCopied(){$('#promptCopied').classList.remove('hidden');
+  setTimeout(()=>$('#promptCopied').classList.add('hidden'),1500);}
+$('#btnCopyPromptFull').addEventListener('click',async()=>{
+  syncPromptEditor();
+  await copy($('#promptOut').value||blockPrompt(selectedBlock()));
+  flashCopied();toast('Prompt + texto copiados. Péguelo en Claude o ChatGPT.');});
+$('#btnCopyPromptOnly').addEventListener('click',async()=>{
+  await copy(blockInstructions(selectedBlock()));flashCopied();toast('Instrucciones copiadas');});
+$('#btnCopyBlockText').addEventListener('click',async()=>{
+  const b=syncPromptEditor()||selectedBlock();
+  await copy(b.text);flashCopied();toast('Fragmento copiado');});
+$('#btnExportAllPrompts').addEventListener('click',()=>{
+  if(!P.blocks.length)return toast('No hay bloques');
+  const all=P.blocks.map(b=>`# Bloque ${b.index}: ${b.chapter}\n\n${blockPrompt(b)}`).join('\n\n---\n\n');
+  download(safeName()+'_prompts.md',new Blob([all],{type:'text/markdown'}));toast('Prompts exportados');});
+// Modo adjunto + descarga de fragmentos (para fragmentos grandes)
+$('#optArtifact').addEventListener('change',showPrompt);
+$('#promptDepth').addEventListener('change',showPrompt);
+$('#btnDownloadFragment').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
+  if(!b)return toast('No hay bloque');downloadFragment(b,false);toast('Fragmento .txt descargado');});
+$('#btnDownloadFragmentMd').addEventListener('click',()=>{const b=syncPromptEditor()||selectedBlock();
+  if(!b)return toast('No hay bloque');downloadFragment(b,true);toast('Fragmento .md descargado');});
+$('#btnAttachPrompt').addEventListener('click',async()=>{
+  const b=syncPromptEditor()||selectedBlock();if(!b)return toast('No hay bloque');
+  downloadFragment(b,false);
+  await copy(blockInstructions(b)+attachNote(b));
+  flashCopied();toast('Fragmento descargado y prompt copiado. Pegue el prompt y adjunte el archivo en el chat.');});
+$('#btnExportAllFragments').addEventListener('click',()=>{
+  if(!P.blocks.length)return toast('No hay bloques');
+  const files={};
+  P.blocks.forEach(b=>{files[`bloque_${String(b.index).padStart(2,'0')}.txt`]=fragmentContent(b,false);});
+  download(safeName()+'_fragmentos.zip',zipStore(files));
+  toast(`${P.blocks.length} fragmento(s) en .zip`);});
+
+/* ================================================================== *
+ *  STEP 4 — pegar respuestas parciales
+ * ================================================================== */
+function renderResponses(){
+  const list=$('#respList');list.innerHTML='';
+  if(!P.blocks.length){list.append(el('p',{class:'muted'},'No hay bloques.'));return;}
+  for(const b of P.blocks){
+    const ta=el('textarea',{style:'min-height:120px'});ta.value=b.response||'';
+    ta.addEventListener('input',()=>{b.response=ta.value;updateRespStats();touch();
+      sum.querySelector('.pill').className='pill '+(b.response.trim()?'done':'pend');
+      sum.querySelector('.pill').textContent=b.response.trim()?'✓ respondido':'pendiente';});
+    const sum=el('summary',{},`Bloque ${b.index} · ${b.chapter} `,
+      el('span',{class:'pill '+(b.response?.trim()?'done':'pend')},b.response?.trim()?'✓ respondido':'pendiente'));
+    const det=el('details',{},sum,
+      el('div',{class:'row',style:'margin:8px 0'},
+        el('button',{class:'ghost copybtn',onclick:async()=>{await copy(blockPrompt(b));toast('Prompt del bloque copiado');}},'Copiar prompt de este bloque'),
+        el('button',{class:'ghost copybtn',onclick:()=>{downloadFragment(b,false);toast('Fragmento descargado');}},'⬇ Fragmento'),
+        el('button',{class:'ghost copybtn',title:'Descarga el fragmento y copia solo el prompt (con nota de adjunto)',onclick:async()=>{downloadFragment(b,false);await copy(blockInstructions(b)+attachNote(b));toast('Fragmento descargado + prompt copiado. Adjunte el archivo en el chat.');}},'📎 Adjunto')),
+      ta);
+    list.append(det);
+  }
+  updateRespStats();
+  if(!$('#goConsol')){
+    list.append(el('div',{class:'row',style:'margin-top:14px'},
+      el('button',{class:'primary',id:'goConsol',onclick:()=>gotoStep(5)},'Continuar a consolidación →')));
+  }
+}
+function updateRespStats(){
+  const done=P.blocks.filter(b=>b.response?.trim()).length;
+  $('#stDone').textContent=done;$('#stTotal').textContent=P.blocks.length;
+  setBar('#respBar',P.blocks.length?done/P.blocks.length*100:0);
+  updateNavBadges();
+}
+
+/* ================================================================== *
+ *  STEP 5 — consolidación
+ * ================================================================== */
+// Presupuesto de caracteres de parciales para un único prompt de consolidación;
+// por encima se pasa a consolidación jerárquica (etapas + fusión).
+const CONSOL_BUDGET=60000;
+function consolidationPrompt(partialsOverride){
+  const m=P.meta;
+  const partials=partialsOverride!=null?partialsOverride
+    :P.blocks.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
+  return `Eres un jurista experto en sistematización doctrinal. A continuación tienes los resúmenes parciales (por bloque/capítulo) de una obra jurídica completa. Consolida TODO en un dossier final ESPECÍFICO Y DETALLADO, no general.
+
+EXTENSIÓN MÁXIMA DE CONSOLIDACIÓN (obligatoria):
+1. Entrega el dossier final como ARTEFACTO (Claude) o CANVAS (ChatGPT) en Markdown si la interfaz lo permite.
+2. Usa toda la capacidad útil de salida disponible para el producto final completo. No conviertas respuestas parciales largas en un resumen corto.
+3. El RESUMEN MAESTRO debe ser el producto más amplio: desarrolla cada capítulo/bloque con sus normas, artículos, plazos, requisitos, definiciones textuales, posturas doctrinales, citas, excepciones y matices. No comprimas un capítulo en una sola frase si los parciales traen más información.
+4. Si hay límite de extensión, prioriza conservar detalle jurídico concreto antes que ahorrar espacio. Reduce solo repeticiones, no contenido sustantivo. Si aun así no cabe todo, termina con "CONTINUAR PARA COMPLETAR" después del último apartado completo.
+
+Reglas: conserva la especificidad de los parciales (artículos, incisos, plazos, requisitos, definiciones, autores y sentencias con su numeración exacta). Prohibido el lenguaje vago ("trata sobre", "diversos aspectos", "varios"). No inventes datos que no estén en los parciales. Mantén la ficha y la síntesis ejecutiva en su formato pedido, pero usa máxima profundidad en el RESUMEN MAESTRO, el índice, conceptos y palabras clave.
+
+Datos conocidos de la obra:
+- Título: ${m.title||'(desconocido)'}
+- Autor: ${m.author||'(desconocido)'}
+- Año: ${m.year||'(desconocido)'}
+- Editorial: ${m.publisher||'(desconocida)'}
+- Materia principal: ${m.subject||'(desconocida)'}
+- Jurisdicción: ${m.juris||'(no indicada)'}
+
+Devuelve la respuesta EXACTAMENTE con los siguientes encabezados y reglas:
+
+## FICHA BIBLIOGRAFICA
+- Título:
+- Autor:
+- Año:
+- Editorial:
+- Edición:
+- Número de páginas:
+- Materia principal:
+- Submaterias: (separadas por comas)
+
+## SINTESIS EJECUTIVA
+(EXACTAMENTE 8 líneas, una idea por línea, que permitan recordar toda la obra en menos de un minuto)
+
+## RESUMEN MAESTRO
+(Resumen integral por capítulos, ESPECÍFICO, extenso y autosuficiente. Usa toda la capacidad útil de salida: para cada capítulo/bloque conserva artículos, plazos, requisitos, definiciones textuales, posturas doctrinales con su autor, criterios jurisprudenciales con su tribunal, citas relevantes, excepciones y distinciones. Cada capítulo debe poder entenderse sin el original. No generalices ni abrevies para "ahorrar espacio".)
+
+## INDICE TEMATICO
+(Reconstruye el índice por capítulos a partir del resumen maestro. Una línea por entrada: "Capítulo X — Tema")
+
+## CONCEPTOS CLAVE
+(Entre 20 y 40 conceptos jurídicos, uno por línea con guion, SIN duplicados)
+
+## PALABRAS CLAVE
+(Entre 30 y 80 términos para clasificación documental, separados por comas, sin duplicados)
+
+--- RESÚMENES PARCIALES ---
+${partials}
+--- FIN ---`;
+}
+// Prompt de una etapa de la consolidación jerárquica.
+function partialConsolPrompt(group,i,total){
+  const partials=group.map(b=>`== Bloque ${b.index}: ${b.chapter} ==\n${(b.response||'(sin respuesta)').trim()}`).join('\n\n');
+  return `Eres un jurista experto en sistematización doctrinal. Esta es la ETAPA ${i} de ${total} de una consolidación por partes de una obra jurídica extensa (los parciales no caben en un solo mensaje). Integra los resúmenes de abajo en una CONSOLIDACIÓN PARCIAL, conservando TODA la especificidad: artículos, incisos, plazos, montos, requisitos, definiciones textuales, autores y sentencias con su numeración exacta. Prohibido el lenguaje vago. No inventes datos. Usa toda la capacidad útil de salida; si tu interfaz lo permite, entrega como ARTEFACTO/CANVAS.
+
+Devuelve EXACTAMENTE con estos encabezados:
+
+## CONSOLIDACION PARCIAL ${i}
+(desarrollo por capítulos/bloques, específico y autosuficiente; no comprimas)
+
+## CONCEPTOS DE ESTA PARTE
+- (uno por línea)
+
+## PALABRAS CLAVE DE ESTA PARTE
+(separadas por comas)
+
+--- RESÚMENES PARCIALES (bloques ${group[0].index}–${group[group.length-1].index}) ---
+${partials}
+--- FIN ---`;
+}
+// Prompt principal a copiar: único (single) o fusión de etapas (hierarchical).
+function consolPromptForCopy(){
+  const plan=consolidationPlan(P.blocks,CONSOL_BUDGET);
+  if(plan.mode==='single')return consolidationPrompt();
+  const parts=plan.groups.map((g,i)=>`== Consolidación parcial ${i+1} (bloques ${g[0].index}–${g[g.length-1].index}) ==\n${((P.consolPartials||[])[i]||'(pendiente)').trim()}`).join('\n\n');
+  return consolidationPrompt(parts);
+}
+function renderConsolidation(){
+  const plan=consolidationPlan(P.blocks,CONSOL_BUDGET);
+  const wrap=$('#consolStages');wrap.innerHTML='';
+  if(plan.mode==='hierarchical'){
+    if(!Array.isArray(P.consolPartials))P.consolPartials=[];
+    if(P.consolPartials.length!==plan.groups.length)
+      P.consolPartials=plan.groups.map((_,i)=>P.consolPartials[i]||'');
+    wrap.append(el('p',{class:'help'},
+      `Los resúmenes parciales suman ${plan.total.toLocaleString('es')} caracteres: demasiado para un solo prompt. `+
+      `Consolide primero en ${plan.groups.length} etapas (copie cada prompt, pegue su resultado) y al final use el prompt de fusión.`));
+    plan.groups.forEach((g,i)=>{
+      const done=!!(P.consolPartials[i]||'').trim();
+      const pill=el('span',{class:'pill '+(done?'done':'pend')},done?'✓ lista':'pendiente');
+      const ta=el('textarea',{style:'min-height:110px'});ta.value=P.consolPartials[i]||'';
+      ta.addEventListener('input',()=>{P.consolPartials[i]=ta.value;touch();
+        const ok=!!ta.value.trim();pill.className='pill '+(ok?'done':'pend');pill.textContent=ok?'✓ lista':'pendiente';});
+      wrap.append(el('details',{},
+        el('summary',{},`Etapa ${i+1} · bloques ${g[0].index}–${g[g.length-1].index} `,pill),
+        el('div',{class:'row',style:'margin:8px 0'},
+          el('button',{class:'ghost copybtn',onclick:async()=>{
+            await copy(partialConsolPrompt(g,i+1,plan.groups.length));toast(`Prompt de la etapa ${i+1} copiado`);}},
+            `Copiar prompt etapa ${i+1}`)),
+        el('label',{class:'fld'},`Pegue aquí la consolidación parcial ${i+1}`),ta));
+    });
+  }
+  $('#btnCopyConsol').textContent=plan.mode==='hierarchical'
+    ?'Copiar prompt de fusión final':'Copiar prompt de consolidación';
+  $('#consolOut').textContent=consolPromptForCopy();
+  $('#consolResponse').value=P.consolResponse||'';
+}
+$('#consolResponse').addEventListener('input',e=>{P.consolResponse=e.target.value;touch();});
+$('#btnCopyConsol').addEventListener('click',async()=>{await copy(consolPromptForCopy());
+  $('#consolCopied').classList.remove('hidden');setTimeout(()=>$('#consolCopied').classList.add('hidden'),1500);
+  toast('Prompt de consolidación copiado');});
+$('#btnParseConsol').addEventListener('click',()=>{
+  if(!P.consolResponse.trim()){toast('Pegue primero la respuesta consolidada');return;}
+  P.products=parseConsolidation(P.consolResponse);
+  touch();gotoStep(6);toast('Consolidación procesada');
+});
+
+/* ---- parser de la respuesta consolidada ---- */
+function stripAccents(s){return s.normalize('NFD').replace(/[̀-ͯ]/g,'');}
+// Normaliza una línea candidata a encabezado: quita #, numeración, viñetas,
+// énfasis markdown y dos puntos finales; sin acentos y en mayúsculas.
+function headerKey(raw){
+  let c=stripAccents(String(raw||'')).toUpperCase();
+  c=c.replace(/[*_`>]/g,'').trim();          // énfasis / cita markdown
+  c=c.replace(/^#{1,6}\s*/,'');              // ## encabezados markdown
+  c=c.replace(/^\d+[.)]\s*/,'');             // "1." o "1)"
+  c=c.replace(/\s*:\s*$/,'');                // dos puntos finales
+  return c.replace(/\s+/g,' ').trim();
+}
+// Detección robusta por línea (offset-safe). Tolera variantes habituales del
+// modelo: "## 1. Ficha bibliográfica:", "**Síntesis ejecutiva**", sin "##", etc.
+const KNOWN_SECTIONS=['FICHA BIBLIOGRAFICA','SINTESIS EJECUTIVA','RESUMEN MAESTRO',
+  'INDICE TEMATICO','CONCEPTOS CLAVE','PALABRAS CLAVE'];
+function splitSections(text){
+  const lines=String(text||'').split(/\r?\n/);
+  const marks=[];
+  for(let i=0;i<lines.length;i++){
+    const k=headerKey(lines[i]);
+    if(KNOWN_SECTIONS.includes(k))marks.push({key:k,line:i});
+  }
+  const out={};
+  for(let j=0;j<marks.length;j++){
+    const start=marks[j].line+1;
+    const end=j+1<marks.length?marks[j+1].line:lines.length;
+    out[marks[j].key]=lines.slice(start,end).join('\n').trim();
+  }
+  return out;
+}
+function listItems(body){
+  if(!body)return [];
+  return body.split(/\n/).map(l=>l.replace(/^[\s\-\*•\d.\)]+/,'').trim()).filter(Boolean);
+}
+function csvItems(body){
+  if(!body)return [];
+  return body.replace(/\n/g,',').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+}
+function dedupe(arr){const seen=new Set();return arr.filter(x=>{const k=stripAccents(x).toLowerCase();
+  if(seen.has(k)||!k)return false;seen.add(k);return true;});}
+
+function parseConsolidation(text){
+  const S=splitSections(text);
+  const get=(...keys)=>{for(const k of keys){for(const key of Object.keys(S)){
+    if(stripAccents(key).toUpperCase().includes(k))return S[key];}}return '';};
+  const fichaBody=get('FICHA');
+  const ficha=parseFicha(fichaBody);
+  const synthRaw=get('SINTESIS','SÍNTESIS EJEC','EXECUTIVE');
+  let synthLines=synthRaw.split(/\n/).map(l=>l.replace(/^[\s\-\*•\d.\)]+/,'').trim()).filter(Boolean);
+  const master=get('RESUMEN MAESTRO','MASTER','RESUMEN');
+  let indexBody=get('INDICE TEM','INDICE','THEMATIC','ÍNDICE');
+  let indexItems=listItems(indexBody);
+  if(!indexItems.length)indexItems=rebuildIndex(master);
+  let concepts=dedupe(listItems(get('CONCEPTOS')));
+  let keywords=dedupe(csvItems(get('PALABRAS CLAVE','KEYWORDS')));
+  // fusionar con metadatos conocidos si la ficha viene vacía
+  ficha.title=ficha.title||P.meta.title;
+  ficha.author=ficha.author||P.meta.author;
+  ficha.year=ficha.year||P.meta.year;
+  ficha.publisher=ficha.publisher||P.meta.publisher;
+  ficha.pages=ficha.pages||P.meta.pages;
+  ficha.subject=ficha.subject||P.meta.subject;
+  return {ficha,synthLines,master,indexItems,concepts,keywords,raw:text};
+}
+// Normaliza valores tipo "(desconocido)", "N/A", "No indicado", "—" a vacío.
+function cleanVal(v){
+  const s=String(v||'').trim().replace(/^[*_`]+|[*_`]+$/g,'').trim();
+  if(/^\(?\s*(desconocid[oa]s?|n\/?a|no\s+indicad[oa]s?|sin\s+datos|—|-|\?+)\s*\)?$/i.test(s))return '';
+  return s;
+}
+function parseFicha(body){
+  const f={title:'',author:'',year:'',publisher:'',edition:'',pages:'',subject:'',subsubjects:''};
+  const map=[['title',/t[ií]tulo/i],['author',/autor/i],['year',/a[ñn]o/i],['publisher',/editorial/i],
+    ['edition',/edici[oó]n/i],['pages',/p[aá]ginas/i],['subject',/materia principal/i],['subsubjects',/submaterias/i]];
+  for(const line of String(body||'').split(/\n/)){
+    // acepta valor vacío (.*) por si el modelo deja el campo en blanco
+    const mm=line.match(/^[\s\-*•]*([^:]+):\s*(.*)$/);if(!mm)continue;
+    const label=mm[1],val=cleanVal(mm[2]);
+    for(const[key,re]of map){if(re.test(label)){if(val)f[key]=val;break;}}
+  }
+  return f;
+}
+function rebuildIndex(master){
+  if(!master)return [];
+  const out=[];
+  for(const line of master.split(/\n/)){
+    const t=line.trim();
+    if(/^#{1,6}\s/.test(t)){out.push(t.replace(/^#+\s*/,''));continue;}
+    if(CHAP_RE.test(t)&&t.length<90)out.push(t.replace(/[*_#]/g,''));
+  }
+  return dedupe(out);
+}
+
+/* ================================================================== *
+ *  STEP 6 — productos finales + validaciones
+ * ================================================================== */
+function vbadge(ok,txt,warn){const cls=ok?'ok':(warn?'warn':'bad');
+  return el('span',{class:'check '+cls},(ok?'✓ ':warn?'! ':'✗ ')+txt);}
+function renderProducts(){
+  const v=$('#validation');v.innerHTML='';const pv=$('#productsView');pv.innerHTML='';
+  if(!P.products){pv.innerHTML='<p class="muted">Aún no hay productos. Complete la consolidación (paso 6).</p>';return;}
+  const pr=P.products;
+  // validaciones segun la especificacion
+  v.append(
+    vbadge(pr.synthLines.length===8,`Síntesis ejecutiva: ${pr.synthLines.length}/8 líneas`,pr.synthLines.length>0&&pr.synthLines.length!==8),
+    vbadge(pr.concepts.length>=20&&pr.concepts.length<=40,`Conceptos clave: ${pr.concepts.length} (20–40)`,pr.concepts.length>0),
+    vbadge(pr.keywords.length>=30&&pr.keywords.length<=80,`Palabras clave: ${pr.keywords.length} (30–80)`,pr.keywords.length>0),
+    vbadge(!!pr.master,'Resumen maestro',false),
+    vbadge(pr.indexItems.length>0,`Índice temático: ${pr.indexItems.length} entradas`,false),
+  );
+
+  // Ficha (editable)
+  const f=pr.ficha;
+  const fichaFields=[['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],
+    ['edition','Edición'],['pages','Número de páginas'],['subject','Materia principal'],['subsubjects','Submaterias']];
+  const fgrid=el('div',{class:'grid2'});
+  for(const[k,lbl]of fichaFields){
+    const inp=el('input',{type:'text',value:f[k]||''});
+    inp.addEventListener('input',()=>{f[k]=inp.value;touch();});
+    fgrid.append(el('div',{},el('label',{class:'fld'},lbl),inp));
+  }
+  pv.append(productBox('📇 Ficha bibliográfica',fgrid));
+
+  pv.append(productBox('📝 Síntesis ejecutiva (8 líneas)',
+    editableArea(pr.synthLines.join('\n'),val=>{pr.synthLines=val.split(/\n/).map(s=>s.trim()).filter(Boolean);renderProducts();},6)));
+
+  pv.append(productBox('📚 Resumen maestro',
+    editableArea(pr.master,val=>{pr.master=val;touch();},14)));
+
+  pv.append(productBox('🗂️ Índice temático',
+    editableArea(pr.indexItems.join('\n'),val=>{pr.indexItems=val.split(/\n/).map(s=>s.trim()).filter(Boolean);renderProducts();},8)));
+
+  const cChips=el('div',{},...pr.concepts.map(c=>el('span',{class:'tag'},c)));
+  pv.append(productBox(`💡 Conceptos clave (${pr.concepts.length})`,
+    el('div',{},cChips,editableArea(pr.concepts.join('\n'),val=>{pr.concepts=dedupe(val.split(/\n/).map(s=>s.trim()).filter(Boolean));renderProducts();},6))));
+
+  const kChips=el('div',{},...pr.keywords.map(c=>el('span',{class:'tag'},c)));
+  pv.append(productBox(`🔖 Palabras clave (${pr.keywords.length})`,
+    el('div',{},kChips,editableArea(pr.keywords.join(', '),val=>{pr.keywords=dedupe(csvItems(val));renderProducts();},4))));
+
+  if(!$('#goExport')){
+    pv.append(el('div',{class:'row',style:'margin-top:14px'},
+      el('button',{class:'primary',id:'goExport',onclick:()=>gotoStep(7)},'Continuar a exportar →')));
+  }
+}
+function productBox(title,...content){
+  const box=el('div',{class:'productbox panel',style:'background:var(--panel2)'},
+    el('h3',{},title),...content);
+  return box;
+}
+function editableArea(value,onsave,rows){
+  const ta=el('textarea',{style:`min-height:${(rows||6)*22}px`});ta.value=value||'';
+  let t;ta.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>onsave(ta.value),600);});
+  ta.addEventListener('blur',()=>onsave(ta.value));
+  return ta;
+}
+
+/* ================================================================== *
+ *  EXPORT — Markdown, DOCX (zip propio), Obsidian, JSON
+ * ================================================================== */
+function buildMarkdown(){
+  const pr=P.products; if(!pr)return '# (sin productos)';
+  const f=pr.ficha;
+  const L=[];
+  L.push(`# ${f.title||P.meta.title||'Documento jurídico'}`);
+  if(f.author)L.push(`*${f.author}*`);
+  L.push('');
+  L.push('## Ficha bibliográfica','');
+  L.push(`| Campo | Valor |`,`|---|---|`);
+  for(const[k,lbl]of [['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],['edition','Edición'],['pages','Páginas'],['subject','Materia principal'],['subsubjects','Submaterias']])
+    L.push(`| ${lbl} | ${(f[k]||'').replace(/\|/g,'\\|')} |`);
+  L.push('','## Síntesis ejecutiva','');
+  pr.synthLines.forEach((l,i)=>L.push(`${i+1}. ${l}`));
+  L.push('','## Índice temático','');
+  pr.indexItems.forEach(it=>L.push(`- ${it}`));
+  L.push('','## Resumen maestro','',pr.master||'');
+  L.push('','## Conceptos clave','');
+  pr.concepts.forEach(c=>L.push(`- ${c}`));
+  L.push('','## Palabras clave','',pr.keywords.join(', '));
+  return L.join('\n');
+}
+function buildObsidian(){
+  const pr=P.products; if(!pr)return '';
+  const f=pr.ficha;
+  const tags=pr.keywords.slice(0,25).map(k=>k.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi,'-').replace(/^-|-$/g,'')).filter(Boolean);
+  const esc=s=>String(s||'').replace(/"/g,'\\"');
+  const fm=['---',
+    `title: "${esc(f.title||P.meta.title)}"`,
+    `author: "${esc(f.author)}"`,
+    `year: "${esc(f.year)}"`,
+    `publisher: "${esc(f.publisher)}"`,
+    `edition: "${esc(f.edition)}"`,
+    `pages: "${esc(f.pages)}"`,
+    `subject: "${esc(f.subject)}"`,
+    `subsubjects: "${esc(f.subsubjects)}"`,
+    `type: resumen-juridico`,
+    `created: ${new Date().toISOString().slice(0,10)}`,
+    `tags: [${tags.map(t=>`"${t}"`).join(', ')}]`,
+    '---',''].join('\n');
+  const body=[`# ${f.title||P.meta.title||'Documento'}`,'',
+    '## Síntesis ejecutiva','',...pr.synthLines.map((l,i)=>`${i+1}. ${l}`),'',
+    '## Índice temático','',...pr.indexItems.map(i=>`- ${i}`),'',
+    '## Resumen maestro','',pr.master||'','',
+    '## Conceptos clave','',...pr.concepts.map(c=>`- ${c}`),'',
+    '## Palabras clave','',pr.keywords.map(k=>'#'+k.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi,'_')).join(' '),
+  ].join('\n');
+  return fm+body;
+}
+function download(name,blob){const a=el('a',{href:URL.createObjectURL(blob),download:name});
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
+function safeName(){return (P.meta.title||P.fileName||'resumen').replace(/[^\w\sáéíóúñ-]/gi,'').trim().replace(/\s+/g,'_').slice(0,60)||'resumen';}
+
+function renderExportChecklist(){
+  const box=$('#exportChecklist');if(!box)return;box.innerHTML='';
+  const pr=P.products;
+  if(!pr){box.append(el('div',{class:'check bad'},'✗ Aún no hay productos: complete la consolidación (paso 6).'));return;}
+  const pend=P.blocks.filter(b=>!b.response?.trim()).length;
+  const checks=[
+    [pend===0,`Respuestas de bloques: ${P.blocks.length-pend}/${P.blocks.length}`,pend>0],
+    [!!P.consolResponse.trim(),'Consolidación registrada',false],
+    [pr.synthLines.length===8,`Síntesis ejecutiva: ${pr.synthLines.length}/8 líneas`,pr.synthLines.length>0&&pr.synthLines.length!==8],
+    [pr.concepts.length>=20&&pr.concepts.length<=40,`Conceptos clave: ${pr.concepts.length} (20–40)`,pr.concepts.length>0],
+    [pr.keywords.length>=30&&pr.keywords.length<=80,`Palabras clave: ${pr.keywords.length} (30–80)`,pr.keywords.length>0],
+    [!!pr.master,'Resumen maestro presente',false],
+    [pr.indexItems.length>0,`Índice temático: ${pr.indexItems.length} entradas`,false],
+  ];
+  for(const[ok,txt,warn]of checks)box.append(el('div',{style:'margin:2px 0'},vbadge(ok,txt,warn)));
+  if(checks.some(c=>!c[0]))box.append(el('div',{class:'small muted',style:'margin-top:6px'},
+    'Puede exportar igualmente, pero conviene corregir lo marcado en el paso 7.'));
+}
+$('#btnExportMd').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'.md',new Blob([buildMarkdown()],{type:'text/markdown'}));toast('Markdown exportado');});
+$('#btnExportObsidian').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'_obsidian.md',new Blob([buildObsidian()],{type:'text/markdown'}));toast('Nota Obsidian exportada');});
+$('#btnExportJson').addEventListener('click',()=>{
+  download(safeName()+'_proyecto.json',new Blob([JSON.stringify(P,null,2)],{type:'application/json'}));toast('Proyecto exportado');});
+$('#btnExportDocx').addEventListener('click',()=>{if(!P.products)return toast('Genere primero los productos');
+  download(safeName()+'.docx',buildDocx());toast('DOCX exportado');});
+
+/* ---------- DOCX generado sin librerías (OOXML + ZIP store) ---------- */
+function xmlEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pPara(text,opts={}){
+  const runs=(text||'').split(/\n/).map((ln,i)=>{
+    const br=i>0?'<w:br/>':'';
+    return `${br}<w:r><w:rPr>${opts.bold?'<w:b/>':''}${opts.size?`<w:sz w:val="${opts.size}"/>`:''}</w:rPr><w:t xml:space="preserve">${xmlEsc(ln)}</w:t></w:r>`;
+  }).join('');
+  const pPr=`<w:pPr>${opts.style?`<w:pStyle w:val="${opts.style}"/>`:''}${opts.spacing?'<w:spacing w:after="120"/>':''}</w:pPr>`;
+  return `<w:p>${pPr}${runs}</w:p>`;
+}
+function heading(text,lvl){return pPara(text,{bold:true,size:lvl===1?32:lvl===2?28:24,spacing:true,style:'Heading'+lvl});}
+function buildDocxXml(){
+  const pr=P.products,f=pr.ficha;const B=[];
+  B.push(heading(f.title||P.meta.title||'Documento jurídico',1));
+  if(f.author)B.push(pPara(f.author,{}));
+  B.push(heading('Ficha bibliográfica',2));
+  for(const[k,lbl]of [['title','Título'],['author','Autor'],['year','Año'],['publisher','Editorial'],['edition','Edición'],['pages','Páginas'],['subject','Materia principal'],['subsubjects','Submaterias']])
+    B.push(pPara(`${lbl}: ${f[k]||''}`,{}));
+  B.push(heading('Síntesis ejecutiva',2));
+  pr.synthLines.forEach((l,i)=>B.push(pPara(`${i+1}. ${l}`,{})));
+  B.push(heading('Índice temático',2));
+  pr.indexItems.forEach(it=>B.push(pPara('• '+it,{})));
+  B.push(heading('Resumen maestro',2));
+  (pr.master||'').split(/\n\n+/).forEach(p=>B.push(pPara(p,{spacing:true})));
+  B.push(heading('Conceptos clave',2));
+  pr.concepts.forEach(c=>B.push(pPara('• '+c,{})));
+  B.push(heading('Palabras clave',2));
+  B.push(pPara(pr.keywords.join(', '),{}));
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${B.join('')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`;
+}
+function buildDocx(){
+  const files={
+    '[Content_Types].xml':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+    '_rels/.rels':`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+    'word/document.xml':buildDocxXml(),
+  };
+  return zipStore(files);
+}
+/* ZIP (método store, sin compresión) — suficiente para DOCX */
+function zipStore(files){
+  const enc=new TextEncoder();
+  const chunks=[];let offset=0;const central=[];
+  const crcTable=zipStore._t||(zipStore._t=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;
+    for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})());
+  function crc32(buf){let c=0xFFFFFFFF;for(let i=0;i<buf.length;i++)c=crcTable[(c^buf[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+  function u16(n){return [n&0xFF,(n>>8)&0xFF];}
+  function u32(n){return [n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}
+  for(const[name,content]of Object.entries(files)){
+    const nameBytes=enc.encode(name);const data=enc.encode(content);
+    const crc=crc32(data);
+    const local=[...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(crc),...u32(data.length),...u32(data.length),...u16(nameBytes.length),...u16(0)];
+    chunks.push(new Uint8Array(local),nameBytes,data);
+    const localLen=local.length+nameBytes.length+data.length;
+    central.push({name:nameBytes,crc,size:data.length,offset});
+    offset+=localLen;
+  }
+  const cdStart=offset;const cd=[];
+  for(const c of central){
+    const rec=[...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(c.crc),...u32(c.size),...u32(c.size),...u16(c.name.length),...u16(0),...u16(0),
+      ...u16(0),...u16(0),...u32(0),...u32(c.offset)];
+    cd.push(new Uint8Array(rec),c.name);offset+=rec.length+c.name.length;
+  }
+  const cdSize=offset-cdStart;
+  const end=[...u32(0x06054b50),...u16(0),...u16(0),...u16(central.length),...u16(central.length),
+    ...u32(cdSize),...u32(cdStart),...u16(0)];
+  return new Blob([...chunks,...cd,new Uint8Array(end)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+/* ================================================================== *
+ *  HERRAMIENTAS LOCALES — RAG (BM25), lotes, grafo conceptual.
+ *  Funciones puras, sin red ni librerías. Cubiertas por tests/run.mjs.
+ * ================================================================== */
+const STOPWORDS_ES=new Set(('a al algo alguna algunas alguno algunos ante antes como con contra cual cuando de del desde donde dos el ella ellas ello ellos en entre era erais eramos eran eres es esa esas ese eso esos esta estaba estan estar este esto estos fue fueron ha hace hacia han hasta hay la las le les lo los mas me mi mientras mucho muy nada ni no nos otra otras otro otros para pero poco por porque que quien se sea sean ser si sin sobre solo son su sus tal tambien tanto te tiene toda todas todo todos tras tu tus un una uno unos y ya').split(' '));
+function tokenize(s){
+  return stripAccents(String(s||'')).toLowerCase()
+    .replace(/[^a-z0-9ñ]+/g,' ').split(/\s+/)
+    .filter(w=>w.length>=3 && !STOPWORDS_ES.has(w));
+}
+// Divide el texto en pasajes ~size caracteres, respetando párrafos.
+function splitPassages(text,size=900){
+  const paras=String(text||'').split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
+  const out=[];let buf='';
+  const flush=()=>{if(buf.trim()){out.push(buf.trim());buf='';}};
+  for(const p of paras){
+    if(buf && (buf.length+p.length)>size)flush();
+    if(p.length>size*1.6){flush();for(let i=0;i<p.length;i+=size)out.push(p.slice(i,i+size));continue;}
+    buf+=(buf?'\n\n':'')+p;
+  }
+  flush();
+  return out.map((t,i)=>({id:i,text:t}));
+}
+// Recuperación léxica BM25 (Okapi). Devuelve los k pasajes más relevantes.
+function bm25Search(passages,query,k=5){
+  const qToks=[...new Set(tokenize(query))];
+  if(!passages.length||!qToks.length)return [];
+  const docs=passages.map(p=>tokenize(p.text));
+  const N=docs.length;
+  const avgdl=docs.reduce((s,d)=>s+d.length,0)/N||1;
+  const df={};
+  for(const d of docs)for(const t of new Set(d))df[t]=(df[t]||0)+1;
+  const k1=1.5,b=0.75;
+  return passages.map((p,i)=>{
+    const d=docs[i],dl=d.length||1,tf={};
+    for(const t of d)tf[t]=(tf[t]||0)+1;
+    let score=0;
+    for(const t of qToks){
+      if(!tf[t])continue;
+      const idf=Math.log(1+(N-df[t]+0.5)/(df[t]+0.5));
+      score+=idf*(tf[t]*(k1+1))/(tf[t]+k1*(1-b+b*dl/avgdl));
+    }
+    return {id:p.id,text:p.text,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,k);
+}
+// Agrupa bloques consecutivos en lotes bajo un presupuesto de caracteres.
+// lenOf permite medir por otro campo (p. ej. la respuesta en vez del texto).
+function groupIntoLotes(blocks,maxChars=24000,lenOf){
+  lenOf=lenOf||function(b){return (b.text||'').length;};
+  const lotes=[];let cur=[],len=0;
+  for(const b of blocks){
+    const bl=lenOf(b);
+    if(cur.length && len+bl>maxChars){lotes.push(cur);cur=[];len=0;}
+    cur.push(b);len+=bl;
+  }
+  if(cur.length)lotes.push(cur);
+  return lotes;
+}
+// Plan de consolidación: si las respuestas parciales caben en un solo prompt,
+// modo 'single'; si no, consolidación jerárquica por etapas (grupos) + fusión.
+function consolidationPlan(blocks,maxChars){
+  const respLen=function(b){return (b.response||'').length;};
+  const total=blocks.reduce((s,b)=>s+respLen(b),0);
+  if(total<=maxChars)return {mode:'single',total,groups:[blocks.slice()]};
+  return {mode:'hierarchical',total,groups:groupIntoLotes(blocks,maxChars,respLen)};
+}
+// Grafo de co-ocurrencia: conceptos que aparecen en el mismo párrafo.
+function buildConceptGraph(concepts,text,minWeight=1){
+  const nodes=(concepts||[]).map(c=>String(c).trim()).filter(Boolean);
+  // frontera de palabra: evita falsos positivos por subcadena ("acción" en "transacción")
+  const keys=nodes.map(n=>{
+    const k=stripAccents(n).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return k?new RegExp('(^|[^a-z0-9ñ])'+k+'([^a-z0-9ñ]|$)'):null;
+  });
+  const counts=nodes.map(()=>0);
+  const pairs=new Map();
+  for(const para of String(text||'').split(/\n+/)){
+    const low=stripAccents(para).toLowerCase();
+    const present=[];
+    for(let i=0;i<keys.length;i++)if(keys[i] && keys[i].test(low)){present.push(i);counts[i]++;}
+    for(let a=0;a<present.length;a++)for(let c=a+1;c<present.length;c++){
+      const key=present[a]+'-'+present[c];
+      pairs.set(key,(pairs.get(key)||0)+1);
+    }
+  }
+  const edges=[];
+  for(const[key,w]of pairs)if(w>=minWeight){const[a,c]=key.split('-').map(Number);edges.push({a,b:c,w});}
+  return {nodes:nodes.map((n,i)=>({label:n,count:counts[i]})),edges};
+}
+// Renderiza un grafo {nodes,edges} a SVG (disposición circular determinista).
+function graphToSvg(graph,opts){
+  opts=opts||{};
+  const W=opts.w||760,H=opts.h||520,cx=W/2,cy=H/2,R=Math.min(W,H)/2-90;
+  const nodes=graph.nodes,edges=graph.edges,n=nodes.length||1;
+  const pos=nodes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;return {x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)};});
+  const maxW=edges.reduce((m,e)=>Math.max(m,e.w),1);
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  s+=`<rect width="${W}" height="${H}" fill="#0d1117"/>`;
+  for(const e of edges){const p=pos[e.a],q=pos[e.b];
+    s+=`<line x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${q.y.toFixed(1)}" stroke="#4f8cff" stroke-opacity="${(0.2+0.6*e.w/maxW).toFixed(2)}" stroke-width="${(1+2*e.w/maxW).toFixed(1)}"/>`;}
+  nodes.forEach((nd,i)=>{const p=pos[i],r=5+Math.min(10,nd.count);
+    const anchor=p.x<cx?'end':'start',dx=p.x<cx?-8:8;
+    s+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="#6ee7b7"/>`;
+    s+=`<text x="${(p.x+dx).toFixed(1)}" y="${(p.y+4).toFixed(1)}" fill="#e7edf3" font-size="12" font-family="sans-serif" text-anchor="${anchor}">${esc(nd.label)}</text>`;});
+  return s+`</svg>`;
+}
+
+/* ---- STEP 8: RAG local (UI) ---- */
+function renderRag(){
+  const has=!!(P.cleanText||P.rawText);
+  $('#ragInfo').textContent=has?'':'No hay texto extraído todavía (complete el paso 2).';
+}
+function ragPromptText(q,hits){
+  const ctx=hits.map((h,i)=>`[Pasaje ${i+1}]\n${h.text}`).join('\n\n');
+  return `Eres un asistente jurídico. Responde la PREGUNTA de forma ESPECÍFICA y detallada (con artículos, plazos, requisitos y citas textuales cuando proceda), usando EXCLUSIVAMENTE los pasajes del documento que se incluyen abajo. No generalices. Si la respuesta no está en ellos, indícalo claramente ("No consta en los fragmentos proporcionados"). Cita entre corchetes el número de pasaje en que te apoyas.
+
+PREGUNTA: ${q}
+
+--- PASAJES DEL DOCUMENTO ---
+${ctx}
+--- FIN ---`;
+}
+let ragCache=null; // {key, corpus} — evita re-trocear/tokenizar en cada búsqueda
+$('#btnRagSearch').addEventListener('click',()=>{
+  const q=$('#ragQuery').value.trim();
+  if(!q){toast('Escriba una pregunta');return;}
+  const text=P.cleanText||P.rawText||'';
+  const key=text.length+':'+text.slice(0,64);
+  if(!ragCache||ragCache.key!==key)ragCache={key,corpus:splitPassages(text,900)};
+  const corpus=ragCache.corpus;
+  if(!corpus.length){toast('No hay texto extraído (paso 2)');return;}
+  const k=+$('#ragK').value||5;
+  const hits=bm25Search(corpus,q,k);
+  const box=$('#ragResults');box.innerHTML='';
+  if(!hits.length){box.innerHTML='<p class="muted small">Sin coincidencias léxicas. Pruebe con otros términos.</p>';
+    $('#ragPromptWrap').classList.add('hidden');$('#ragInfo').textContent='';return;}
+  $('#ragInfo').textContent=`${hits.length} pasajes recuperados de ${corpus.length} · BM25 local`;
+  hits.forEach((h,i)=>{
+    const d=el('details',{},el('summary',{},`Pasaje ${i+1} · relevancia ${h.score.toFixed(2)}`),
+      el('pre',{class:'out',style:'max-height:200px'},h.text));
+    if(i===0)d.open=true;box.append(d);
+  });
+  $('#ragPrompt').value=ragPromptText(q,hits);
+  $('#ragPromptWrap').classList.remove('hidden');
+});
+$('#ragQuery').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnRagSearch').click();});
+$('#btnRagCopy').addEventListener('click',async()=>{await copy($('#ragPrompt').value);
+  $('#ragCopied').classList.remove('hidden');setTimeout(()=>$('#ragCopied').classList.add('hidden'),1500);
+  toast('Prompt acotado copiado');});
+
+/* ---- STEP 9: grafo conceptual (UI) ---- */
+let lastGraphSvg='';
+function renderGraph(){
+  if(!P.products){$('#graphInfo').textContent='Genere primero los productos (paso 7).';
+    $('#graphView').innerHTML='';$('#btnGraphSvg').disabled=true;}
+}
+$('#btnGraphBuild').addEventListener('click',()=>{
+  if(!P.products){toast('Genere primero los productos (paso 7)');return;}
+  const min=+$('#graphMin').value||1;
+  const g=buildConceptGraph(P.products.concepts,(P.products.master||'')+'\n'+(P.cleanText||''),min);
+  // limitar a los 30 conceptos más conectados para que el grafo sea legible
+  if(g.nodes.length>30){
+    const deg=g.nodes.map(()=>0);
+    for(const e of g.edges){deg[e.a]+=e.w;deg[e.b]+=e.w;}
+    const keep=[...g.nodes.keys()].sort((a,b)=>deg[b]-deg[a]).slice(0,30);
+    const keepSet=new Set(keep),remap=new Map(keep.map((old,ni)=>[old,ni]));
+    g.nodes=keep.map(i=>g.nodes[i]);
+    g.edges=g.edges.filter(e=>keepSet.has(e.a)&&keepSet.has(e.b))
+      .map(e=>({a:remap.get(e.a),b:remap.get(e.b),w:e.w}));
+  }
+  if(!g.edges.length){$('#graphInfo').textContent='No se hallaron co-ocurrencias con ese umbral. Baje el umbral.';
+    $('#graphView').innerHTML='';$('#btnGraphSvg').disabled=true;return;}
+  lastGraphSvg=graphToSvg(g);
+  $('#graphView').innerHTML=lastGraphSvg;
+  $('#graphInfo').textContent=`${g.nodes.length} conceptos · ${g.edges.length} enlaces (umbral ${min})`;
+  $('#btnGraphSvg').disabled=false;
+});
+$('#btnGraphSvg').addEventListener('click',()=>{if(!lastGraphSvg)return;
+  download(safeName()+'_grafo.svg',new Blob([lastGraphSvg],{type:'image/svg+xml'}));toast('Grafo SVG exportado');});
+
+/* ---- batch: descargar prompts agrupados en lotes ---- */
+$('#btnExportLotes').addEventListener('click',()=>{
+  if(!P.blocks.length)return toast('No hay bloques');
+  const max=Math.max(6000,+$('#loteSize').value||24000);
+  const lotes=groupIntoLotes(P.blocks,max);
+  const parts=lotes.map((lote,i)=>{
+    const head=`# Lote ${i+1}/${lotes.length} — bloques ${lote[0].index}–${lote[lote.length-1].index}`;
+    return head+'\n\n'+lote.map(b=>blockPrompt(b)).join('\n\n========\n\n');
+  });
+  download(safeName()+'_lotes.md',new Blob([parts.join('\n\n\n')],{type:'text/markdown'}));
+  toast(`${lotes.length} lote(s) generado(s)`);
+});
+
+/* ================================================================== *
+ *  OFFLINE / SRI — descarga de librerías para vendor/ y cálculo de
+ *  hashes de integridad (Subresource Integrity). Todo desde el equipo
+ *  del usuario; el sandbox de esta app nunca sube ni recibe datos.
+ * ================================================================== */
+const VENDOR_DL=[
+  [REMOTE.pdf,'pdf.min.js'],
+  [REMOTE.pdfWorker,'pdf.worker.min.js'],
+  [REMOTE.tesseract,'tesseract.min.js'],
+  [REMOTE.mammoth,'mammoth.browser.min.js'],
+];
+async function fetchLib(url){const r=await fetch(url,{mode:'cors'});
+  if(!r.ok)throw new Error('HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());}
+async function sha384(bytes){const h=await crypto.subtle.digest('SHA-384',bytes);
+  let bin='';for(const x of new Uint8Array(h))bin+=String.fromCharCode(x);return 'sha384-'+btoa(bin);}
+$('#btnOffline').addEventListener('click',openOffline);
+function openOffline(){
+  const w=el('div',{style:'position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:60'});
+  const card=el('div',{class:'panel',style:'max-width:660px;width:92%;max-height:85vh;overflow:auto'});
+  card.append(el('h2',{},'Modo sin conexión y verificación de integridad (SRI)'));
+  card.append(el('p',{class:'help'},
+    `Estado: ${USE_LOCAL_VENDOR?'modo VENDOR (librerías locales, sin red).':'modo CDN (cada librería se descarga de cdnjs/jsdelivr la primera vez que se usa).'} `
+    +(Object.keys(SRI).length?`Integridad SRI activa para ${Object.keys(SRI).length} recurso(s).`:'Sin hashes SRI fijados.')));
+  const log=el('pre',{class:'out',style:'max-height:280px;white-space:pre-wrap'},'');
+  const bDl=el('button',{class:'primary copybtn',onclick:async()=>{
+    let t='Descargando librerías (desde su equipo)…\n';log.textContent=t;
+    for(const[url,fn]of VENDOR_DL){
+      try{const bytes=await fetchLib(url);
+        download(fn,new Blob([bytes],{type:'application/javascript'}));
+        t+=`✓ ${fn} (${(bytes.length/1024).toFixed(0)} KB)\n`;}
+      catch(e){t+=`✗ ${fn}: ${e.message}\n`;}
+      log.textContent=t;
+    }
+    t+='\nColoque los 4 archivos en una carpeta vendor/ junto a index.html y\nactive el modo local: <script>window.RJA_LOCAL_VENDOR=true<\/script>';
+    log.textContent=t;
+  }},'⬇ Descargar librerías (vendor/)');
+  const bSri=el('button',{class:'ghost copybtn',onclick:async()=>{
+    let t='Calculando hashes SRI (SHA-384) desde su equipo…\n\n';log.textContent=t;
+    const map={};
+    for(const[url,fn]of VENDOR_DL){
+      try{const bytes=await fetchLib(url);const h=await sha384(bytes);map[url]=h;
+        t+=`${fn}\n  ${h}\n`;}
+      catch(e){t+=`${fn}\n  ✗ ${e.message}\n`;}
+      log.textContent=t;
+    }
+    t+='\nPegue esto en index.html ANTES del <script> principal para fijar la integridad:\n\n';
+    t+='<script>window.RJA_SRI = '+JSON.stringify(map,null,2)+';<\/script>';
+    log.textContent=t;
+  }},'🔒 Calcular hashes SRI');
+  card.append(el('div',{class:'row',style:'margin:8px 0'},bDl,bSri,
+    el('button',{class:'ghost copybtn',onclick:()=>w.remove()},'Cerrar')));
+  card.append(el('p',{class:'small muted'},'La descarga de librerías y el cálculo de hashes ocurren en su navegador y requieren red. La carpeta vendor/ permite uso 100% offline sin ejecutar código remoto.'));
+  card.append(log);
+  w.append(card);w.addEventListener('click',e=>{if(e.target===w)w.remove();});document.body.append(w);
+}
+
+/* ================================================================== *
+ *  PROYECTOS — nuevo, abrir, importar
+ * ================================================================== */
+$('#btnNew').addEventListener('click',()=>{
+  if(!confirm('¿Crear un nuevo proyecto? El actual queda guardado en la lista de proyectos.'))return;
+  DB.put(structuredCloneSafe(P)).catch(()=>{});
+  P=blankProject();fileBuffer=null;
+  $('#btnExtract').disabled=true;
+  for(const id of Object.keys(metaMap))$('#'+id).value='';
+  $('#loadInfo').classList.add('hidden');$('#extractResult').classList.add('hidden');
+  $('#blocksPanel').classList.add('hidden');
+  setProjName();gotoStep(0);toast('Nuevo proyecto');
+});
+$('#btnOpen').addEventListener('click',openProjects);
+async function openProjects(){
+  const all=(await DB.all()).sort((a,b)=>b.updatedAt-a.updatedAt);
+  const w=el('div',{style:'position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:60'});
+  const card=el('div',{class:'panel',style:'max-width:560px;width:90%;max-height:80vh;overflow:auto'});
+  card.append(el('h2',{},'Proyectos guardados'));
+  const imp=el('input',{type:'file',accept:'.json',class:'hidden'});
+  imp.addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;
+    await importProjectFile(file); w.remove();});
+  card.append(el('div',{class:'row',style:'margin-bottom:10px'},
+    el('button',{class:'ghost',onclick:()=>imp.click()},'⬆ Importar .json'),imp,
+    el('button',{class:'ghost',onclick:()=>w.remove()},'Cerrar')));
+  if(!all.length)card.append(el('p',{class:'muted'},'No hay proyectos guardados todavía.'));
+  for(const pr of all){
+    const row=el('div',{class:'row',style:'justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0'},
+      el('div',{},el('b',{},pr.meta?.title||pr.fileName||'(sin título)'),
+        el('div',{class:'small muted'},`${new Date(pr.updatedAt).toLocaleString('es')} · ${pr.blocks?.length||0} bloques · paso ${(pr.step||0)+1}`)),
+      el('div',{class:'row'},
+        el('button',{class:'primary copybtn',onclick:()=>{w.remove();loadProject(pr);}},'Abrir'),
+        el('button',{class:'ghost copybtn',onclick:async()=>{if(confirm('¿Eliminar proyecto?')){await DB.del(pr.id);row.remove();}}},'🗑')));
+    card.append(row);
+  }
+  w.append(card);w.addEventListener('click',e=>{if(e.target===w)w.remove();});
+  document.body.append(w);
+}
+async function importProjectFile(file){
+  try{
+    const data=normalizeProject(JSON.parse(await file.text()));
+    await DB.put(data);
+    loadProject(data);
+    toast('Proyecto importado');
+  }catch(e){
+    console.error(e);
+    toast('No se pudo importar: JSON inválido o corrupto');
+  }
+}
+function loadProject(data){
+  P=normalizeProject(data);fileBuffer=null;
+  // sin archivo en memoria no se puede re-extraer hasta reabrirlo
+  $('#btnExtract').disabled=true;
+  $('#metaTitle').value=P.meta.title||'';$('#metaAuthor').value=P.meta.author||'';
+  $('#metaYear').value=P.meta.year||'';$('#metaPublisher').value=P.meta.publisher||'';
+  $('#metaSubject').value=P.meta.subject||'';$('#metaJuris').value=P.meta.juris||'';
+  if(P.fileName){$('#loadInfo').classList.remove('hidden');
+    $('#loadInfo').replaceChildren(
+      el('span',{class:'pill done'},'✓ ',P.fileName),
+      el('span',{class:'muted small'},'(reabra el archivo si necesita re-extraer)')
+    );}
+  else{$('#loadInfo').classList.add('hidden');}
+  if(P.cleanText||P.rawText)showExtractResult();else $('#extractResult').classList.add('hidden');
+  if(P.blocks?.length)renderBlocks();else $('#blocksPanel').classList.add('hidden');
+  setProjName();gotoStep(P.step||0);toast('Proyecto cargado');
+}
+
+/* ================================================================== *
+ *  INIT — recuperar último proyecto
+ * ================================================================== */
+(async()=>{
+  try{
+    const all=(await DB.all()).sort((a,b)=>b.updatedAt-a.updatedAt);
+    if(all.length){loadProject(all[0]);}
+    else{gotoStep(0);}
+  }catch(e){gotoStep(0);}
+})();
+window.addEventListener('beforeunload',()=>{try{DB.put(structuredCloneSafe(P)).catch(()=>{});}catch(e){}});
+</script>
+</body>
+</html>
